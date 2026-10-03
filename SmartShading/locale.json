@@ -1,0 +1,30 @@
+{
+    "translations": {
+        "de": {
+            "Dashboard": "Dashboard",
+            "Status Summary": "Statusübersicht",
+            "Inventory": "Inventur",
+            "Last Evaluation": "Letzte Auswertung",
+            "Active": "Aktiv",
+            "Inactive": "Inaktiv",
+            "Shadow mode (no actuator writes)": "Shadow-Modus (keine Aktorbefehle)",
+            "Discover legacy blind configurations automatically": "Alte Behang-Konfigurationen automatisch erkennen",
+            "Evaluation interval (seconds)": "Auswerteintervall (Sekunden)",
+            "Environment inputs": "Umweltdaten",
+            "Sun azimuth": "Sonnenazimut",
+            "Sun elevation": "Sonnenhöhe",
+            "Solar radiation": "Solarstrahlung",
+            "Outside temperature": "Außentemperatur",
+            "Wind alarm": "Windalarm",
+            "Rain/wetness alarm": "Regen-/Nässealarm",
+            "Solar thresholds": "Solar-Schwellwerte",
+            "Shade ON (W/m²)": "Beschattung EIN (W/m²)",
+            "Shade OFF (W/m²)": "Beschattung AUS (W/m²)",
+            "Blinds": "Behänge",
+            "Evaluate now": "Jetzt auswerten",
+            "Show validation": "Validierung anzeigen",
+            "Show inventory JSON": "Inventur-JSON anzeigen",
+            "Yellow rows were discovered from the legacy installation and can be reviewed/saved into the module configuration.": "Gelbe Zeilen wurden aus der Altinstallation erkannt und können geprüft/in die Modulkonfiguration übernommen werden."
+        }
+    }
+}
