@@ -1,0 +1,14 @@
+{
+    "id": "{76B37C42-A13E-44D8-982B-755670186EEB}",
+    "name": "SmartShading",
+    "type": 3,
+    "vendor": "Smart Home",
+    "aliases": [
+        "Smart Shading",
+        "Sonnenschutz Steuerung"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "SHD"
+}
