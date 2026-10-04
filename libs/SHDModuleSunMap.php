@@ -6,7 +6,7 @@ trait SHDModuleSunMap
     private function sunMapHtml(array $decisions): string
     {
         $blinds=$this->blinds();
-        $cx=450.0;$cy=320.0;$houseW=330.0;$houseH=220.0;
+        $cx=500.0;$cy=370.0;$houseW=340.0;$houseH=225.0;
         $facades=[
             0=>$this->ReadPropertyFloat('LegacyFacade0Azimuth'),
             1=>$this->ReadPropertyFloat('LegacyFacade1Azimuth'),
@@ -21,22 +21,22 @@ trait SHDModuleSunMap
         $sunAz=$s['sunAzimuth']??null;$sunEl=$s['sunElevation']??null;$rad=$s['radiationFiltered']??null;
 
         $svg=[];
-        $svg[]='<svg viewBox="0 0 900 650" width="100%" height="auto" role="img" aria-label="Sonnenkarte Haus">';
+        $svg[]='<svg viewBox="0 0 1000 760" width="100%" height="auto" role="img" aria-label="Sonnenkarte Haus">';
         $svg[]='<defs><filter id="shdShadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.18"/></filter></defs>';
-        $svg[]='<rect x="0" y="0" width="900" height="650" rx="18" fill="#f8fafc"/>';
-        $svg[]='<text x="450" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">SmartShading — Sonnenkarte</text>';
-        $svg[]='<text x="450" y="63" text-anchor="middle" font-size="14" fill="#475569">Draufsicht · schematische Fensterpositionen nach Fassade</text>';
+        $svg[]='<rect x="0" y="0" width="1000" height="760" rx="18" fill="#f8fafc"/>';
+        $svg[]='<text x="500" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">SmartShading — Sonnenkarte</text>';
+        $svg[]='<text x="500" y="63" text-anchor="middle" font-size="14" fill="#475569">Draufsicht · schematische Fensterpositionen nach Fassade</text>';
 
         // Cardinal orientation.
-        $svg[]='<text x="450" y="96" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">N</text>';
-        $svg[]='<line x1="450" y1="105" x2="450" y2="130" stroke="#334155" stroke-width="2"/><polygon points="450,101 445,110 455,110" fill="#334155"/>';
-        $svg[]='<text x="790" y="322" text-anchor="middle" font-size="16" fill="#64748b">O</text>';
-        $svg[]='<text x="450" y="612" text-anchor="middle" font-size="16" fill="#64748b">S</text>';
-        $svg[]='<text x="110" y="322" text-anchor="middle" font-size="16" fill="#64748b">W</text>';
+        $svg[]='<text x="500" y="98" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">N</text>';
+        $svg[]='<line x1="500" y1="108" x2="500" y2="134" stroke="#334155" stroke-width="2"/><polygon points="500,103 495,112 505,112" fill="#334155"/>';
+        $svg[]='<text x="920" y="372" text-anchor="middle" font-size="16" fill="#64748b">O</text>';
+        $svg[]='<text x="500" y="624" text-anchor="middle" font-size="16" fill="#64748b">S</text>';
+        $svg[]='<text x="80" y="372" text-anchor="middle" font-size="16" fill="#64748b">W</text>';
 
         // Sun position around the building, azimuth 0=N / 90=E / 180=S / 270=W.
         if($sunAz!==null){
-            $a=deg2rad((float)$sunAz);$r=255.0;$sx=$cx+sin($a)*$r;$sy=$cy-cos($a)*$r;
+            $a=deg2rad((float)$sunAz);$r=285.0;$sx=$cx+sin($a)*$r;$sy=$cy-cos($a)*$r;
             $svg[]='<line x1="'.round($sx,1).'" y1="'.round($sy,1).'" x2="'.$cx.'" y2="'.$cy.'" stroke="#f59e0b" stroke-width="4" stroke-dasharray="10 8" opacity="0.75"/>';
             $svg[]='<circle cx="'.round($sx,1).'" cy="'.round($sy,1).'" r="26" fill="#fbbf24" stroke="#f59e0b" stroke-width="3" filter="url(#shdShadow)"/>';
             $svg[]='<text x="'.round($sx,1).'" y="'.round($sy+5,1).'" text-anchor="middle" font-size="23">☀</text>';
@@ -63,7 +63,7 @@ trait SHDModuleSunMap
         foreach($groups as $idx=>$items){
             $n=count($items);if($n===0)continue;$faz=(float)$facades[$idx];$a=deg2rad($faz);
             $normalX=sin($a);$normalY=-cos($a);$tanX=cos($a);$tanY=sin($a);
-            $baseDist=195.0;$spacing=min(62.0,300.0/max(1,$n));
+            $baseDist=225.0;$spacing=min(58.0,420.0/max(1,$n));
             foreach($items as $i=>$item){
                 [$key,$b,$e]=$item;$offset=($i-($n-1)/2)*$spacing;
                 $x=$cx+$normalX*$baseDist+$tanX*$offset;$y=$cy+$normalY*$baseDist+$tanY*$offset;
@@ -79,18 +79,20 @@ trait SHDModuleSunMap
                 $tip=htmlspecialchars((string)($b['name']??'').' | '.$floor.' | '.($direct?'direkte Sonne':'keine direkte Sonne').' | '.$reason.' | Ziel '.$this->fmt($d['position']??null,'%'),ENT_QUOTES);
                 $svg[]='<g><title>'.$tip.'</title><circle cx="'.round($x,1).'" cy="'.round($y,1).'" r="19" fill="'.$fill.'" stroke="#ffffff" stroke-width="3" filter="url(#shdShadow)"/>';
                 $svg[]='<text x="'.round($x,1).'" y="'.round($y+4,1).'" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">'.htmlspecialchars($floor).'</text>';
-                $labelX=$x+$normalX*30;$labelY=$y+$normalY*30;
-                $svg[]='<text x="'.round($labelX,1).'" y="'.round($labelY,1).'" text-anchor="middle" font-size="10" fill="#334155">'.htmlspecialchars($name).'</text></g>';
+                $labelX=$x+$normalX*31;$labelY=$y+$normalY*31;
+                $anchor=abs($normalX)>0.45?($normalX>0?'start':'end'):'middle';
+                if($anchor==='start')$labelX+=5;if($anchor==='end')$labelX-=5;
+                $svg[]='<text x="'.round($labelX,1).'" y="'.round($labelY,1).'" text-anchor="'.$anchor.'" font-size="10" fill="#334155">'.htmlspecialchars($name).'</text></g>';
             }
         }
 
         $azText=$sunAz===null?'–':number_format((float)$sunAz,1,',','.').'°';$elText=$sunEl===null?'–':number_format((float)$sunEl,1,',','.').'°';$radText=$rad===null?'–':number_format((float)$rad,0,',','.').' W/m²';
-        $svg[]='<rect x="22" y="530" width="856" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>';
-        $svg[]='<text x="42" y="555" font-size="14" font-weight="700" fill="#111827">Sonne: Azimut '.$azText.' · Höhe '.$elText.' · Strahlung '.$radText.'</text>';
-        $svg[]='<text x="42" y="582" font-size="12" fill="#475569">● gelb = direkte Sonne · ● orange = Sonnenschutz/Überhitzung · ● grün = Tageslicht · ● violett = Manuell · ● blau = geschlossen/Schlaf</text>';
-        $svg[]='<text x="42" y="606" font-size="11" fill="#64748b">Marker = schematische Position auf der jeweiligen Fassade; EG/OG/UG im Marker. Aktualisiert '.date('H:i:s').'</text>';
+        $svg[]='<rect x="28" y="650" width="944" height="86" rx="12" fill="#ffffff" stroke="#e2e8f0"/>';
+        $svg[]='<text x="48" y="675" font-size="14" font-weight="700" fill="#111827">Sonne: Azimut '.$azText.' · Höhe '.$elText.' · Strahlung '.$radText.'</text>';
+        $svg[]='<text x="48" y="701" font-size="12" fill="#475569">● gelb = direkte Sonne · ● orange = Sonnenschutz/Überhitzung · ● grün = Tageslicht · ● violett = Manuell · ● blau = geschlossen/Schlaf</text>';
+        $svg[]='<text x="48" y="723" font-size="11" fill="#64748b">Marker = schematische Position auf der jeweiligen Fassade; EG/OG/UG im Marker. Aktualisiert '.date('H:i:s').'</text>';
         $svg[]='</svg>';
-        return '<div style="font-family:Arial,sans-serif;max-width:1000px">'.implode('',$svg).'</div>';
+        return '<div style="font-family:Arial,sans-serif;max-width:1100px">'.implode('',$svg).'</div>';
     }
 
     private function sunMapShortName(string $name): string
