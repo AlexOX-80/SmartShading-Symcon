@@ -8,13 +8,18 @@ require_once __DIR__ . '/../libs/SHDModuleRuntimeFixes.php';
 require_once __DIR__ . '/../libs/SHDModuleSunMap.php';
 require_once __DIR__ . '/../libs/SHDModuleSetpoint.php';
 require_once __DIR__ . '/../libs/SHDModuleProtocolTolerance.php';
+require_once __DIR__ . '/../libs/SHDModuleShadowSun.php';
 require_once __DIR__ . '/../libs/SHDModuleData.php';
 
 class SmartShading extends IPSModule
 {
-    use SHDModuleUI, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleSunMap, SHDModuleSetpoint, SHDModuleProtocolTolerance, SHDModuleData {
+    use SHDModuleUI, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleSunMap, SHDModuleSetpoint, SHDModuleProtocolTolerance, SHDModuleShadowSun, SHDModuleData {
         SHDModuleRuntimeFixes::Evaluate insteadof SHDModuleRuntime;
         SHDModuleSetpoint::effectiveRoomSetpoint insteadof SHDModuleData;
         SHDModuleProtocolTolerance::shouldLog insteadof SHDModuleRuntime;
+        SHDModuleRuntime::state as private stateBase;
+        SHDModuleShadowSun::state insteadof SHDModuleRuntime;
+        SHDModuleRuntime::protocolEvent as private protocolEventBase;
+        SHDModuleShadowSun::protocolEvent insteadof SHDModuleRuntime;
     }
 }
