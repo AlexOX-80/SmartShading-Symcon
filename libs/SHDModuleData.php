@@ -25,7 +25,7 @@ trait SHDModuleData
             foreach(['facadeAzimuth','sunFrom','sunTo'] as $field){
                 if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];
             }
-            $merged['warnings']=array_values(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])));
+            $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),fn($x)=>!str_contains((string)$x,'ID Lamellensteuerung')));
             $merged['infos']=array_values(array_unique(array_merge($base['infos']??[],$cfg['infos']??[])));
             $legacy[(string)$k]=$merged;
         }
@@ -57,15 +57,28 @@ trait SHDModuleData
         if($bid>0&&IPS_ObjectExists($bid)){
             foreach(IPS_GetChildrenIDs($bid) as $c){
                 $o=IPS_GetObject($c);$type=(int)($o['ObjectType']??-1);$name=mb_strtolower(trim((string)($o['ObjectName']??'')));
-                if($type===2&&IPS_VariableExists($c)&&$name==='aktuelles programm')$b['calendarModeID']=$c;
-                if($type===4){
+                if($type===2&&IPS_VariableExists($c)&&$name==='aktuelles programm'){
+                    $b['calendarModeID']=$c;
+                    // Historic structure: the schedule event is a child of the mode variable.
+                    foreach(IPS_GetChildrenIDs($c) as $eventID){
+                        $eo=IPS_GetObject($eventID);$etype=(int)($eo['ObjectType']??-1);$ename=mb_strtolower(trim((string)($eo['ObjectName']??'')));
+                        if($etype!==4)continue;
+                        $isSchedule=false;
+                        if(function_exists('IPS_GetEvent')){
+                            try{$ev=IPS_GetEvent($eventID);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
+                        }
+                        if($isSchedule||str_contains($ename,'wochenplan')||str_contains($ename,'ereignis')){
+                            $b['scheduleEventID']=$eventID;break;
+                        }
+                    }
+                }
+                // Fallback for installations where the event is directly below the blind.
+                if($type===4&&(int)($b['scheduleEventID']??0)<=0){
                     $isSchedule=false;
                     if(function_exists('IPS_GetEvent')){
                         try{$ev=IPS_GetEvent($c);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
                     }
-                    if($isSchedule||str_contains($name,'wochenplan')||str_contains($name,'ereignis')){
-                        if((int)($b['scheduleEventID']??0)<=0)$b['scheduleEventID']=$c;
-                    }
+                    if($isSchedule||str_contains($name,'wochenplan')||str_contains($name,'ereignis'))$b['scheduleEventID']=$c;
                 }
             }
         }
