@@ -26,10 +26,17 @@ trait SHDModuleData
             // For legacy rows the freshly derived house azimuth is authoritative unless the configured value is a
             // meaningful non-zero override.
             if(($cfg['source']??'')==='legacy'&&((!isset($cfg['facadeAzimuth']))||(float)$cfg['facadeAzimuth']===0.0)&&isset($base['facadeAzimuth']))$merged['facadeAzimuth']=$base['facadeAzimuth'];
-            foreach(['sunFrom','sunTo'] as $field){
+            foreach(['sunFrom','sunTo','privacyDayPosition','privacyDaySlat','privacyNightPosition','privacyNightSlat'] as $field){
                 if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];
             }
-            $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),fn($x)=>!str_contains((string)$x,'ID Lamellensteuerung')));
+            $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),static function($x): bool {
+                $s=(string)$x;
+                if(str_contains($s,'ID Lamellensteuerung'))return false;
+                if(str_contains($s,'Sichschutz_Hoehe_Nacht=128'))return false;
+                if(str_contains($s,'Sichschutz_Hoehe_Nacht=255'))return false;
+                if(str_contains($s,'Sichschutz_Winkel_Nacht=360'))return false;
+                return true;
+            }));
             $merged['infos']=array_values(array_unique(array_merge($base['infos']??[],$cfg['infos']??[])));
             $this->repairSlatControlFromKnx($merged);
             $legacy[(string)$k]=$merged;
