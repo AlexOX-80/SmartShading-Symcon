@@ -18,12 +18,18 @@ trait SHDModuleShadowSun
         $sun=$this->boolVar($id);
         if($id<=0||$sun===null) return $s;
 
-        $testRadiation=$sun?600.0:0.0;
+        // A stale TRUE from the legacy "Sonne" flag must never create solar load
+        // after sunset. The astronomical sun elevation is therefore a hard bound.
+        $sunElevation=$s['sunElevation']??null;
+        $sunAboveHorizon=$sunElevation===null?true:((float)$sunElevation>0.0);
+        $testRadiation=($sun&&$sunAboveHorizon)?600.0:0.0;
+
         $s['radiation']=$testRadiation;
         $s['radiationFiltered']=$testRadiation;
-        $s['radiationSource']='shadow-sun-bool';
+        $s['radiationSource']=(!$sunAboveHorizon&&$sun)?'shadow-sun-bool-sunset-zero':'shadow-sun-bool';
         $s['shadowSunID']=$id;
         $s['shadowSun']=$sun;
+        $s['shadowSunAboveHorizon']=$sunAboveHorizon;
         return $s;
     }
 
@@ -36,6 +42,7 @@ trait SHDModuleShadowSun
         $event['context']['radiationMeasured']=$s['radiationMeasured']??null;
         $event['context']['shadowSunID']=$s['shadowSunID']??0;
         $event['context']['shadowSun']=$s['shadowSun']??null;
+        $event['context']['shadowSunAboveHorizon']=$s['shadowSunAboveHorizon']??null;
         return $event;
     }
 
