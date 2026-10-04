@@ -74,7 +74,7 @@ trait SHDModuleUI
 
             ['type'=>'List','name'=>'Blinds','caption'=>'Behänge','add'=>true,'delete'=>true,'rowCount'=>12,'values'=>$rows,'columns'=>$this->columns(),'form'=>$this->editForm()]
         ],'actions'=>[
-            ['type'=>'Label','caption'=>'v0.3.2 Simulation: Es werden keine Fahrbefehle und keine KNX-Bediensperren geschrieben.'],
+            ['type'=>'Label','caption'=>'Simulationsmodus: Es werden keine Fahrbefehle und keine KNX-Bediensperren geschrieben.'],
             ['type'=>'Button','caption'=>'Jetzt auswerten','onClick'=>'SHD_Evaluate($id);'],
             ['type'=>'Button','caption'=>'Konfiguration prüfen','onClick'=>'echo SHD_ValidateConfiguration($id);'],
             ['type'=>'Button','caption'=>'Inventar als JSON anzeigen','onClick'=>'echo SHD_GetInventoryJSON($id);'],
