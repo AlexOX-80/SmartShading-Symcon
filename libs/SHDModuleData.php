@@ -44,12 +44,36 @@ trait SHDModuleData
             $o=IPS_GetObject($id);if(($o['ObjectType']??-1)!==2||($o['ObjectName']??'')!=='Konfiguration')continue;
             $v=IPS_GetVariable($id);if(($v['VariableType']??-1)!==3)continue;
             $raw=json_decode(GetValueString($id),true);if(!is_array($raw)||(!array_key_exists('BehangID',$raw)&&!array_key_exists('Typ',$raw)))continue;
-            $b=SHDConfig::normalizeLegacy($raw,$id);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
+            $b=SHDConfig::normalizeLegacy($raw,$id);$this->migrateKnownLegacyPrivacyValues($b,$raw);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
             $b['blindID']=$bid;
             if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
             $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$this->repairSlatControlFromKnx($b);$r[(string)$bid]=$b;
         }
         return$r;
+    }
+
+    private function migrateKnownLegacyPrivacyValues(array &$b,array $raw): void
+    {
+        $migrations=[];
+        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===128.0){
+            $b['privacyNightPosition']=50.0;
+            $migrations[]='Sichschutz_Hoehe_Nacht 128 (0..255-Skala) → 50 %';
+        }
+        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===255.0){
+            $b['privacyNightPosition']=100.0;
+            $migrations[]='Sichschutz_Hoehe_Nacht 255 (0..255-Skala) → 100 %';
+        }
+        if(isset($raw['Sichschutz_Winkel_Nacht'])&&(float)$raw['Sichschutz_Winkel_Nacht']===360.0){
+            $b['privacyNightSlat']=100.0;
+            $migrations[]='Sichschutz_Winkel_Nacht 360° (voll geschlossen) → 100 %';
+        }
+        if(!$migrations)return;
+        $b['warnings']=array_values(array_filter($b['warnings']??[],static function($x): bool {
+            $s=(string)$x;
+            return !str_contains($s,'Sichschutz_Hoehe_Nacht=128')&&!str_contains($s,'Sichschutz_Hoehe_Nacht=255')&&!str_contains($s,'Sichschutz_Winkel_Nacht=360');
+        }));
+        foreach($migrations as $m)$b['infos'][]='Legacy-Migration: '.$m.'.';
+        $b['infos']=array_values(array_unique($b['infos']));
     }
 
     private function legacyAz(mixed $f): ?float
