@@ -22,20 +22,16 @@ trait SHDModuleData
             foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){
                 if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];
             }
-
-            // Older form versions persisted 0 for an unset facade azimuth. For legacy rows this is
-            // a UI default, not the actual house orientation. Always restore the mapped legacy azimuth.
-            if(($cfg['source']??'')==='legacy'&&array_key_exists('facadeAzimuth',$base)&&$base['facadeAzimuth']!==null){
-                $merged['facadeAzimuth']=$base['facadeAzimuth'];
-            }elseif((!array_key_exists('facadeAzimuth',$cfg)||$cfg['facadeAzimuth']===null||$cfg['facadeAzimuth']==='')&&array_key_exists('facadeAzimuth',$base)){
-                $merged['facadeAzimuth']=$base['facadeAzimuth'];
-            }
+            // Legacy rows saved by older module versions may contain the UI default 0 for facadeAzimuth.
+            // For legacy rows the freshly derived house azimuth is authoritative unless the configured value is a
+            // meaningful non-zero override.
+            if(($cfg['source']??'')==='legacy'&&((!isset($cfg['facadeAzimuth']))||(float)$cfg['facadeAzimuth']===0.0)&&isset($base['facadeAzimuth']))$merged['facadeAzimuth']=$base['facadeAzimuth'];
             foreach(['sunFrom','sunTo'] as $field){
                 if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];
             }
-
             $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),fn($x)=>!str_contains((string)$x,'ID Lamellensteuerung')));
             $merged['infos']=array_values(array_unique(array_merge($base['infos']??[],$cfg['infos']??[])));
+            $this->repairSlatControlFromKnx($merged);
             $legacy[(string)$k]=$merged;
         }
         return$legacy;
@@ -51,7 +47,7 @@ trait SHDModuleData
             $b=SHDConfig::normalizeLegacy($raw,$id);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
             $b['blindID']=$bid;
             if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
-            $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$r[(string)$bid]=$b;
+            $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$this->repairSlatControlFromKnx($b);$r[(string)$bid]=$b;
         }
         return$r;
     }
@@ -99,6 +95,27 @@ trait SHDModuleData
         }
     }
 
+    private function repairSlatControlFromKnx(array &$b): void
+    {
+        if(($b['type']??'')!=='venetian')return;
+        if($this->effectiveSlatValueID($b)>0)return;
+        $position=(int)($b['positionControlID']??0);if($position<=0||!IPS_InstanceExists($position))return;
+        try{$pc=json_decode(IPS_GetConfiguration($position),true);}catch(Throwable $e){return;}
+        if(!is_array($pc))return;
+        $ga1=(int)($pc['GroupAddress1']??-1);$ga3=(int)($pc['GroupAddress3']??-1);
+        if($ga1<0||$ga3<0)return;
+        foreach(IPS_GetInstanceList() as $candidate){
+            if($candidate===$position)continue;
+            try{$cc=json_decode(IPS_GetConfiguration($candidate),true);}catch(Throwable $e){continue;}
+            if(!is_array($cc))continue;
+            if((int)($cc['GroupAddress1']??-2)!==$ga1)continue;
+            if((int)($cc['GroupAddress2']??-2)!==5)continue;
+            if((int)($cc['GroupAddress3']??-2)!==$ga3)continue;
+            $valueID=@IPS_GetObjectIDByIdent('Value',$candidate);
+            if($valueID!==false&&IPS_VariableExists((int)$valueID)){$b['slatControlID']=$candidate;return;}
+        }
+    }
+
     private function effectivePositionValueID(array $b): int
     {
         $status=(int)($b['positionStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;
@@ -117,20 +134,6 @@ trait SHDModuleData
         }
         if($control>0&&IPS_VariableExists($control))return$control;
         return 0;
-    }
-
-    private function objectDisplayName(int $id): string
-    {
-        if($id<=0||!IPS_ObjectExists($id))return'–';
-        return IPS_GetName($id).' ['.$id.']';
-    }
-
-    private function feedbackDisplay(array $b): string
-    {
-        $status=(int)($b['positionStatusID']??0);
-        if($status>0&&IPS_VariableExists($status))return'separat: '.$this->objectDisplayName($status);
-        if($this->effectivePositionValueID($b)>0&&(int)($b['positionControlID']??0)>0)return'integriert';
-        return'fehlt';
     }
 
     private function validateBlind(array $b): array
