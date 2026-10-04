@@ -168,4 +168,23 @@ trait SHDModuleUI
             ['type'=>'ValidationTextBox','name'=>'source','caption'=>'Herkunft','visible'=>false]
         ];
     }
+
+    private function objectDisplayName(int $id): string
+    {
+        if($id<=0||!IPS_ObjectExists($id))return 'fehlt';
+        return IPS_GetName($id).' (#'.$id.')';
+    }
+
+    private function feedbackDisplay(array $b): string
+    {
+        $explicit=(int)($b['positionStatusID']??0);
+        if($explicit>0&&IPS_VariableExists($explicit))return 'separat';
+        $control=(int)($b['positionControlID']??0);
+        if($control>0&&IPS_InstanceExists($control)){
+            $valueID=@IPS_GetObjectIDByIdent('Value',$control);
+            if($valueID!==false&&IPS_VariableExists((int)$valueID))return 'integriert';
+        }
+        if($control>0&&IPS_VariableExists($control))return 'integriert';
+        return 'fehlt';
+    }
 }
