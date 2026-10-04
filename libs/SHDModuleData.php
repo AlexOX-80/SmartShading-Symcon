@@ -12,34 +12,18 @@ trait SHDModuleData
 
     private function blinds(): array
     {
-        $legacy=$this->ReadPropertyBoolean('AutoDiscoverLegacy')?$this->legacy():[];
-        $configured=$this->configured();
-        if(!$this->ReadPropertyBoolean('AutoDiscoverLegacy'))return$configured;
-
+        $auto=$this->ReadPropertyBoolean('AutoDiscoverLegacy');
+        $legacy=$auto?$this->legacy():[];$configured=$this->configured();
+        if(!$auto){foreach($configured as &$b)$this->repairRoomTemperatureMapping($b);unset($b);return$configured;}
         foreach($configured as $k=>$cfg){
-            if(!isset($legacy[(string)$k])){$legacy[(string)$k]=$cfg;continue;}
+            if(!isset($legacy[(string)$k])){$this->repairRoomTemperatureMapping($cfg);$legacy[(string)$k]=$cfg;continue;}
             $base=$legacy[(string)$k];$merged=array_replace($base,$cfg);
-            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){
-                if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];
-            }
-            // Legacy rows saved by older module versions may contain the UI default 0 for facadeAzimuth.
-            // For legacy rows the freshly derived house azimuth is authoritative unless the configured value is a
-            // meaningful non-zero override.
+            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];}
             if(($cfg['source']??'')==='legacy'&&((!isset($cfg['facadeAzimuth']))||(float)$cfg['facadeAzimuth']===0.0)&&isset($base['facadeAzimuth']))$merged['facadeAzimuth']=$base['facadeAzimuth'];
-            foreach(['sunFrom','sunTo','privacyDayPosition','privacyDaySlat','privacyNightPosition','privacyNightSlat'] as $field){
-                if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];
-            }
-            $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),static function($x): bool {
-                $s=(string)$x;
-                if(str_contains($s,'ID Lamellensteuerung'))return false;
-                if(str_contains($s,'Sichschutz_Hoehe_Nacht=128'))return false;
-                if(str_contains($s,'Sichschutz_Hoehe_Nacht=255'))return false;
-                if(str_contains($s,'Sichschutz_Winkel_Nacht=360'))return false;
-                return true;
-            }));
+            foreach(['sunFrom','sunTo','privacyDayPosition','privacyDaySlat','privacyNightPosition','privacyNightSlat'] as $field){if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];}
+            $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),static function($x): bool{$s=(string)$x;return!str_contains($s,'ID Lamellensteuerung')&&!str_contains($s,'Sichschutz_Hoehe_Nacht=128')&&!str_contains($s,'Sichschutz_Hoehe_Nacht=255')&&!str_contains($s,'Sichschutz_Winkel_Nacht=360');}));
             $merged['infos']=array_values(array_unique(array_merge($base['infos']??[],$cfg['infos']??[])));
-            $this->repairSlatControlFromKnx($merged);
-            $legacy[(string)$k]=$merged;
+            $this->repairSlatControlFromKnx($merged);$this->repairRoomTemperatureMapping($merged);$legacy[(string)$k]=$merged;
         }
         return$legacy;
     }
@@ -52,142 +36,107 @@ trait SHDModuleData
             $v=IPS_GetVariable($id);if(($v['VariableType']??-1)!==3)continue;
             $raw=json_decode(GetValueString($id),true);if(!is_array($raw)||(!array_key_exists('BehangID',$raw)&&!array_key_exists('Typ',$raw)))continue;
             $b=SHDConfig::normalizeLegacy($raw,$id);$this->migrateKnownLegacyPrivacyValues($b,$raw);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
-            $b['blindID']=$bid;
-            if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
-            $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$this->repairSlatControlFromKnx($b);$r[(string)$bid]=$b;
+            $b['blindID']=$bid;if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
+            $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$this->repairSlatControlFromKnx($b);$this->repairRoomTemperatureMapping($b);$r[(string)$bid]=$b;
         }
         return$r;
     }
 
     private function migrateKnownLegacyPrivacyValues(array &$b,array $raw): void
     {
-        $migrations=[];
-        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===128.0){
-            $b['privacyNightPosition']=50.0;
-            $migrations[]='Sichschutz_Hoehe_Nacht 128 (0..255-Skala) → 50 %';
-        }
-        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===255.0){
-            $b['privacyNightPosition']=100.0;
-            $migrations[]='Sichschutz_Hoehe_Nacht 255 (0..255-Skala) → 100 %';
-        }
-        if(isset($raw['Sichschutz_Winkel_Nacht'])&&(float)$raw['Sichschutz_Winkel_Nacht']===360.0){
-            $b['privacyNightSlat']=100.0;
-            $migrations[]='Sichschutz_Winkel_Nacht 360° (voll geschlossen) → 100 %';
-        }
-        if(!$migrations)return;
-        $b['warnings']=array_values(array_filter($b['warnings']??[],static function($x): bool {
-            $s=(string)$x;
-            return !str_contains($s,'Sichschutz_Hoehe_Nacht=128')&&!str_contains($s,'Sichschutz_Hoehe_Nacht=255')&&!str_contains($s,'Sichschutz_Winkel_Nacht=360');
-        }));
-        foreach($migrations as $m)$b['infos'][]='Legacy-Migration: '.$m.'.';
-        $b['infos']=array_values(array_unique($b['infos']));
+        $m=[];
+        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===128.0){$b['privacyNightPosition']=50.0;$m[]='Sichschutz_Hoehe_Nacht 128 (0..255-Skala) → 50 %';}
+        if(isset($raw['Sichschutz_Hoehe_Nacht'])&&(float)$raw['Sichschutz_Hoehe_Nacht']===255.0){$b['privacyNightPosition']=100.0;$m[]='Sichschutz_Hoehe_Nacht 255 (0..255-Skala) → 100 %';}
+        if(isset($raw['Sichschutz_Winkel_Nacht'])&&(float)$raw['Sichschutz_Winkel_Nacht']===360.0){$b['privacyNightSlat']=100.0;$m[]='Sichschutz_Winkel_Nacht 360° (voll geschlossen) → 100 %';}
+        if(!$m)return;
+        $b['warnings']=array_values(array_filter($b['warnings']??[],static function($x): bool{$s=(string)$x;return!str_contains($s,'Sichschutz_Hoehe_Nacht=128')&&!str_contains($s,'Sichschutz_Hoehe_Nacht=255')&&!str_contains($s,'Sichschutz_Winkel_Nacht=360');}));
+        foreach($m as $x)$b['infos'][]='Legacy-Migration: '.$x.'.';$b['infos']=array_values(array_unique($b['infos']));
     }
 
-    private function legacyAz(mixed $f): ?float
-    {
-        if($f===null||$f==='')return null;
-        return match((int)$f){0=>$this->ReadPropertyFloat('LegacyFacade0Azimuth'),1=>$this->ReadPropertyFloat('LegacyFacade1Azimuth'),2=>$this->ReadPropertyFloat('LegacyFacade2Azimuth'),3=>$this->ReadPropertyFloat('LegacyFacade3Azimuth'),default=>null};
-    }
+    private function legacyAz(mixed $f): ?float{if($f===null||$f==='')return null;return match((int)$f){0=>$this->ReadPropertyFloat('LegacyFacade0Azimuth'),1=>$this->ReadPropertyFloat('LegacyFacade1Azimuth'),2=>$this->ReadPropertyFloat('LegacyFacade2Azimuth'),3=>$this->ReadPropertyFloat('LegacyFacade3Azimuth'),default=>null};}
 
     private function mapLegacy(array &$b): void
     {
         $bid=(int)($b['blindID']??0);
-        if($bid>0&&IPS_ObjectExists($bid)){
-            foreach(IPS_GetChildrenIDs($bid) as $c){
-                $o=IPS_GetObject($c);$type=(int)($o['ObjectType']??-1);$name=mb_strtolower(trim((string)($o['ObjectName']??'')));
-                if($type===2&&IPS_VariableExists($c)&&$name==='aktuelles programm'){
-                    $b['calendarModeID']=$c;
-                    foreach(IPS_GetChildrenIDs($c) as $eventID){
-                        $eo=IPS_GetObject($eventID);$etype=(int)($eo['ObjectType']??-1);$ename=mb_strtolower(trim((string)($eo['ObjectName']??'')));
-                        if($etype!==4)continue;
-                        $isSchedule=false;
-                        if(function_exists('IPS_GetEvent')){
-                            try{$ev=IPS_GetEvent($eventID);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
-                        }
-                        if($isSchedule||str_contains($ename,'wochenplan')||str_contains($ename,'ereignis')){$b['scheduleEventID']=$eventID;break;}
-                    }
-                }
-                if($type===4&&(int)($b['scheduleEventID']??0)<=0){
-                    $isSchedule=false;
-                    if(function_exists('IPS_GetEvent')){
-                        try{$ev=IPS_GetEvent($c);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
-                    }
-                    if($isSchedule||str_contains($name,'wochenplan')||str_contains($name,'ereignis'))$b['scheduleEventID']=$c;
-                }
-            }
+        if($bid>0&&IPS_ObjectExists($bid))foreach(IPS_GetChildrenIDs($bid) as $c){
+            $o=IPS_GetObject($c);$type=(int)($o['ObjectType']??-1);$name=mb_strtolower(trim((string)($o['ObjectName']??'')));
+            if($type===2&&IPS_VariableExists($c)&&$name==='aktuelles programm'){$b['calendarModeID']=$c;foreach(IPS_GetChildrenIDs($c) as $eventID){$eo=IPS_GetObject($eventID);$ename=mb_strtolower(trim((string)($eo['ObjectName']??'')));if((int)($eo['ObjectType']??-1)!==4)continue;$is=false;if(function_exists('IPS_GetEvent'))try{$ev=IPS_GetEvent($eventID);$is=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}if($is||str_contains($ename,'wochenplan')||str_contains($ename,'ereignis')){$b['scheduleEventID']=$eventID;break;}}}
+            if($type===4&&(int)($b['scheduleEventID']??0)<=0){$is=false;if(function_exists('IPS_GetEvent'))try{$ev=IPS_GetEvent($c);$is=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}if($is||str_contains($name,'wochenplan')||str_contains($name,'ereignis'))$b['scheduleEventID']=$c;}
         }
-
         $tokens=array_values(array_filter(preg_split('/\s+/u',preg_replace('/[^\pL\pN]+/u',' ',mb_strtolower((string)($b['name']??'')))??''),fn($x)=>mb_strlen($x)>=4&&!in_array($x,['höhe','anfahren'],true)));
-        foreach(IPS_GetObjectList() as $id){
-            $o=IPS_GetObject($id);if(($o['ObjectType']??-1)!==2)continue;$n=mb_strtolower((string)($o['ObjectName']??''));$match=false;
-            foreach($tokens as $t)if(str_contains($n,$t)){$match=true;break;}if(!$match)continue;
-            if(($b['positionStatusID']??0)<=0&&(str_contains($n,'position')||str_contains($n,'status'))&&!str_contains($n,'lamell'))$b['positionStatusID']=$id;
-            if(($b['slatStatusID']??0)<=0&&str_contains($n,'lamell')&&(str_contains($n,'pos')||str_contains($n,'status')))$b['slatStatusID']=$id;
-        }
+        foreach(IPS_GetObjectList() as $id){$o=IPS_GetObject($id);if(($o['ObjectType']??-1)!==2)continue;$n=mb_strtolower((string)($o['ObjectName']??''));$match=false;foreach($tokens as $t)if(str_contains($n,$t)){$match=true;break;}if(!$match)continue;if(($b['positionStatusID']??0)<=0&&(str_contains($n,'position')||str_contains($n,'status'))&&!str_contains($n,'lamell'))$b['positionStatusID']=$id;if(($b['slatStatusID']??0)<=0&&str_contains($n,'lamell')&&(str_contains($n,'pos')||str_contains($n,'status')))$b['slatStatusID']=$id;}
     }
 
     private function repairSlatControlFromKnx(array &$b): void
     {
-        if(($b['type']??'')!=='venetian')return;
-        if($this->effectiveSlatValueID($b)>0)return;
-        $position=(int)($b['positionControlID']??0);if($position<=0||!IPS_InstanceExists($position))return;
-        try{$pc=json_decode(IPS_GetConfiguration($position),true);}catch(Throwable $e){return;}
-        if(!is_array($pc))return;
-        $ga1=(int)($pc['GroupAddress1']??-1);$ga3=(int)($pc['GroupAddress3']??-1);
-        if($ga1<0||$ga3<0)return;
-        foreach(IPS_GetInstanceList() as $candidate){
-            if($candidate===$position)continue;
-            try{$cc=json_decode(IPS_GetConfiguration($candidate),true);}catch(Throwable $e){continue;}
-            if(!is_array($cc))continue;
-            if((int)($cc['GroupAddress1']??-2)!==$ga1)continue;
-            if((int)($cc['GroupAddress2']??-2)!==5)continue;
-            if((int)($cc['GroupAddress3']??-2)!==$ga3)continue;
-            $valueID=@IPS_GetObjectIDByIdent('Value',$candidate);
-            if($valueID!==false&&IPS_VariableExists((int)$valueID)){$b['slatControlID']=$candidate;return;}
-        }
+        if(($b['type']??'')!=='venetian'||$this->effectiveSlatValueID($b)>0)return;$position=(int)($b['positionControlID']??0);if($position<=0||!IPS_InstanceExists($position))return;
+        try{$pc=json_decode(IPS_GetConfiguration($position),true);}catch(Throwable $e){return;}if(!is_array($pc))return;$ga1=(int)($pc['GroupAddress1']??-1);$ga3=(int)($pc['GroupAddress3']??-1);if($ga1<0||$ga3<0)return;
+        foreach(IPS_GetInstanceList() as $candidate){if($candidate===$position)continue;try{$cc=json_decode(IPS_GetConfiguration($candidate),true);}catch(Throwable $e){continue;}if(!is_array($cc)||(int)($cc['GroupAddress1']??-2)!==$ga1||(int)($cc['GroupAddress2']??-2)!==5||(int)($cc['GroupAddress3']??-2)!==$ga3)continue;$valueID=@IPS_GetObjectIDByIdent('Value',$candidate);if($valueID!==false&&IPS_VariableExists((int)$valueID)){$b['slatControlID']=$candidate;return;}}
     }
 
-    private function effectivePositionValueID(array $b): int
+    private function repairRoomTemperatureMapping(array &$b): void
     {
-        $status=(int)($b['positionStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;
-        $control=(int)($b['positionControlID']??0);if($control>0&&IPS_InstanceExists($control)){
-            $valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;
-        }
-        if($control>0&&IPS_VariableExists($control))return$control;
-        return 0;
+        if((int)($b['roomTempID']??0)>0&&$this->num((int)$b['roomTempID'])!==null)return;
+        $room=$this->canonicalTemperatureRoom((string)(($b['room']??'').' '.($b['name']??'')));if($room===null)return;
+        $wanted='temperatur '.mb_strtolower($room).' (ist)';$best=0;$score=-1;
+        foreach(IPS_GetObjectList() as $id){$o=IPS_GetObject($id);if(!in_array((int)($o['ObjectType']??-1),[1,2],true))continue;if(mb_strtolower(trim((string)($o['ObjectName']??'')))!==$wanted)continue;$v=$this->num($id);if($v===null||$v<5.0||$v>40.0)continue;$s=10;$path=$this->objectPathText($id);if(str_contains($path,'heizung'))$s+=20;if(str_contains($path,'klima'))$s+=10;if(str_contains($path,'temperaturen knx'))$s+=5;if($s>$score){$score=$s;$best=$id;}}
+        if($best>0){$b['roomTempID']=$best;$b['infos'][]='Raumtemperatur automatisch zugeordnet: '.IPS_GetName($best).' (#'.$best.').';$b['infos']=array_values(array_unique($b['infos']));}
     }
 
-    private function effectiveSlatValueID(array $b): int
+    private function canonicalTemperatureRoom(string $text): ?string
     {
-        $status=(int)($b['slatStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;
-        $control=(int)($b['slatControlID']??0);if($control>0&&IPS_InstanceExists($control)){
-            $valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;
-        }
-        if($control>0&&IPS_VariableExists($control))return$control;
-        return 0;
+        $n=mb_strtolower($text);
+        $map=['gäste wc'=>'Gäste WC','gaeste wc'=>'Gäste WC','bad eg'=>'Bad EG','bad og'=>'Bad OG','küche'=>'Küche','kueche'=>'Küche','esszimmer'=>'Essen','essen'=>'Essen','wohnzimmer'=>'Wohnen','wohnen'=>'Wohnen','arbeiten'=>'Arbeiten','schlafzimmer'=>'Schlafen','schlafen'=>'Schlafen','kind 1'=>'Kind 1','kind1'=>'Kind 1','kind 2'=>'Kind 2','kind2'=>'Kind 2','kind 3'=>'Kind 3','kind3'=>'Kind 3','treppenhaus'=>'Flur OG','flur og'=>'Flur OG'];
+        foreach($map as $needle=>$room)if(str_contains($n,$needle))return$room;return null;
     }
+
+    private function eBusRoomSetpointID(): int
+    {
+        static $cached=null;if($cached!==null)return$cached;$best=0;$score=-1;
+        foreach(IPS_GetObjectList() as $id){$o=IPS_GetObject($id);$type=(int)($o['ObjectType']??-1);$name=mb_strtolower(trim((string)($o['ObjectName']??'')));$candidate=false;$s=0;
+            if($type===2&&str_starts_with($name,'raumtemperatur soll')){$candidate=true;$s+=30;}
+            if($type===1){try{$cfg=json_decode(IPS_GetConfiguration($id),true);}catch(Throwable $e){$cfg=null;}if(is_array($cfg)&&mb_strtolower((string)($cfg['Topic']??''))==='ebusd/hk_stat/raumtemp_soll'){$candidate=true;$s+=25;}}
+            if(!$candidate)continue;$v=$this->num($id);if($v===null||$v<5.0||$v>35.0)continue;$path=$this->objectPathText($id);if(str_contains($path,'ebus'))$s+=20;if($s>$score){$score=$s;$best=$id;}
+        }
+        return$cached=$best;
+    }
+
+    private function effectiveRoomSetpoint(array $b): array
+    {
+        $id=(int)($b['roomSetpointID']??0);$v=$this->num($id);if($v!==null&&$v>=5.0&&$v<=35.0)return['value'=>$v,'source'=>'room','id'=>$id];
+        $fallback=$this->eBusRoomSetpointID();$fv=$this->num($fallback);if($fv!==null&&$fv>=5.0&&$fv<=35.0)return['value'=>$fv,'source'=>'eBUS','id'=>$fallback];
+        return['value'=>null,'source'=>'none','id'=>0];
+    }
+
+    private function objectPathText(int $id): string
+    {
+        $parts=[];$cur=$id;$guard=0;while($cur>0&&IPS_ObjectExists($cur)&&$guard++<8){$parts[]=mb_strtolower(IPS_GetName($cur));$cur=IPS_GetParent($cur);}return implode(' / ',$parts);
+    }
+
+    private function numericValueID(int $id): int
+    {
+        if($id<=0)return 0;if(IPS_VariableExists($id))return$id;if(IPS_InstanceExists($id)){$valueID=@IPS_GetObjectIDByIdent('Value',$id);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;foreach(IPS_GetChildrenIDs($id) as $c)if(IPS_VariableExists($c)){try{$v=IPS_GetVariable($c);if(in_array((int)($v['VariableType']??-1),[1,2],true))return$c;}catch(Throwable $e){}}}return 0;
+    }
+
+    private function effectivePositionValueID(array $b): int{$status=(int)($b['positionStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;$control=(int)($b['positionControlID']??0);if($control>0&&IPS_InstanceExists($control)){$valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;}if($control>0&&IPS_VariableExists($control))return$control;return 0;}
+    private function effectiveSlatValueID(array $b): int{$status=(int)($b['slatStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;$control=(int)($b['slatControlID']??0);if($control>0&&IPS_InstanceExists($control)){$valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;}if($control>0&&IPS_VariableExists($control))return$control;return 0;}
 
     private function validateBlind(array $b): array
     {
-        $e=[];$w=$b['warnings']??[];$i=$b['infos']??[];
-        if(trim((string)($b['name']??''))==='')$e[]='Name fehlt.';
-        if(SHDMath::facadeAzimuth($b)===null&&(($b['sunFrom']??null)===null||($b['sunTo']??null)===null))$w[]='Keine nutzbare Fassadenausrichtung oder Sonnenfenster vorhanden.';
-        if((int)($b['roomTempID']??0)<=0)$i[]='Raumtemperatur fehlt; thermische Regeln sind eingeschränkt.';
-        if((int)($b['roomSetpointID']??0)<=0)$i[]='Raum-Solltemperatur fehlt; thermische Regeln sind eingeschränkt.';
-        if($this->effectivePositionValueID($b)<=0)$w[]='Positionswert/-rückmeldung fehlt.';
-        if(($b['type']??'')==='venetian'&&$this->effectiveSlatValueID($b)<=0)$w[]='Lamellenwert/-rückmeldung fehlt.';
-        if((int)($b['calendarModeID']??0)<=0)$i[]='Variable „Aktuelles Programm“ fehlt; Standardmodus wird verwendet.';
-        if((int)($b['scheduleEventID']??0)<=0)$i[]='Wochenplan/Kalender-Ereignis nicht zugeordnet.';
+        $e=[];$w=$b['warnings']??[];$i=$b['infos']??[];if(trim((string)($b['name']??''))==='')$e[]='Name fehlt.';if(SHDMath::facadeAzimuth($b)===null&&(($b['sunFrom']??null)===null||($b['sunTo']??null)===null))$w[]='Keine nutzbare Fassadenausrichtung oder Sonnenfenster vorhanden.';
+        if($this->num((int)($b['roomTempID']??0))===null)$i[]='Raumtemperatur fehlt; thermische Regeln sind eingeschränkt.';
+        if(($this->effectiveRoomSetpoint($b)['value']??null)===null)$i[]='Raum-Solltemperatur fehlt; thermische Regeln sind eingeschränkt.';
+        if($this->effectivePositionValueID($b)<=0)$w[]='Positionswert/-rückmeldung fehlt.';if(($b['type']??'')==='venetian'&&$this->effectiveSlatValueID($b)<=0)$w[]='Lamellenwert/-rückmeldung fehlt.';if((int)($b['calendarModeID']??0)<=0)$i[]='Variable „Aktuelles Programm“ fehlt; Standardmodus wird verwendet.';if((int)($b['scheduleEventID']??0)<=0)$i[]='Wochenplan/Kalender-Ereignis nicht zugeordnet.';
         return['errors'=>array_values(array_unique($e)),'warnings'=>array_values(array_unique($w)),'infos'=>array_values(array_unique($i))];
     }
 
     private function inventoryEntry(array $b): array
     {
-        return['blindID'=>$b['blindID']??0,'name'=>$b['name']??'','source'=>$b['source']??'module','type'=>$b['type']??'','room'=>$b['room']??'','facadeAzimuth'=>SHDMath::facadeAzimuth($b),'sunFrom'=>$b['sunFrom']??null,'sunTo'=>$b['sunTo']??null,'calendarModeID'=>$b['calendarModeID']??0,'scheduleEventID'=>$b['scheduleEventID']??0,'sleepStateID'=>$b['sleepStateID']??0,'wakeReleaseID'=>$b['wakeReleaseID']??0,'daylightReleaseID'=>$b['daylightReleaseID']??0,'controlLockID'=>$b['controlLockID']??0,'panicID'=>$b['panicID']??0,'positionControlID'=>$b['positionControlID']??0,'positionStatusID'=>$b['positionStatusID']??0,'effectivePositionValueID'=>$this->effectivePositionValueID($b),'slatControlID'=>$b['slatControlID']??0,'slatStatusID'=>$b['slatStatusID']??0,'effectiveSlatValueID'=>$this->effectiveSlatValueID($b),'doorContactID'=>$b['doorContactID']??0,'roomTempID'=>$b['roomTempID']??0,'roomSetpointID'=>$b['roomSetpointID']??0,'validation'=>$this->validateBlind($b)];
+        $sp=$this->effectiveRoomSetpoint($b);return['blindID'=>$b['blindID']??0,'name'=>$b['name']??'','source'=>$b['source']??'module','type'=>$b['type']??'','room'=>$b['room']??'','facadeAzimuth'=>SHDMath::facadeAzimuth($b),'sunFrom'=>$b['sunFrom']??null,'sunTo'=>$b['sunTo']??null,'calendarModeID'=>$b['calendarModeID']??0,'scheduleEventID'=>$b['scheduleEventID']??0,'sleepStateID'=>$b['sleepStateID']??0,'wakeReleaseID'=>$b['wakeReleaseID']??0,'daylightReleaseID'=>$b['daylightReleaseID']??0,'controlLockID'=>$b['controlLockID']??0,'panicID'=>$b['panicID']??0,'positionControlID'=>$b['positionControlID']??0,'positionStatusID'=>$b['positionStatusID']??0,'effectivePositionValueID'=>$this->effectivePositionValueID($b),'slatControlID'=>$b['slatControlID']??0,'slatStatusID'=>$b['slatStatusID']??0,'effectiveSlatValueID'=>$this->effectiveSlatValueID($b),'doorContactID'=>$b['doorContactID']??0,'roomTempID'=>$b['roomTempID']??0,'roomSetpointID'=>$b['roomSetpointID']??0,'effectiveRoomSetpointID'=>$sp['id'],'roomSetpointSource'=>$sp['source'],'validation'=>$this->validateBlind($b)];
     }
 
     private function fmt(mixed $v,string $s): string{return$v===null?'–':number_format((float)$v,1,',','.').$s;}
-    private function num(int $id): ?float{if($id<=0||!IPS_VariableExists($id))return null;$v=GetValue($id);return is_numeric($v)?(float)$v:null;}
+    private function num(int $id): ?float{$vid=$this->numericValueID($id);if($vid<=0)return null;$v=GetValue($vid);return is_numeric($v)?(float)$v:null;}
     private function intVar(int $id): ?int{if($id<=0||!IPS_VariableExists($id))return null;$v=GetValue($id);return is_numeric($v)?(int)$v:null;}
     private function boolVar(int $id): ?bool{return($id<=0||!IPS_VariableExists($id))?null:(bool)GetValue($id);}
 }
