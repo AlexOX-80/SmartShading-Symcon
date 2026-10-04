@@ -19,7 +19,7 @@ trait SHDModuleData
         foreach($configured as $k=>$cfg){
             if(!isset($legacy[(string)$k])){$legacy[(string)$k]=$cfg;continue;}
             $base=$legacy[(string)$k];$merged=array_replace($base,$cfg);
-            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){
+            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatStatusID','roomTempID','roomSetpointID'] as $field){
                 if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];
             }
             foreach(['facadeAzimuth','sunFrom','sunTo'] as $field){
@@ -40,11 +40,12 @@ trait SHDModuleData
             $v=IPS_GetVariable($id);if(($v['VariableType']??-1)!==3)continue;
             $raw=json_decode(GetValueString($id),true);if(!is_array($raw)||(!array_key_exists('BehangID',$raw)&&!array_key_exists('Typ',$raw)))continue;
             $b=SHDConfig::normalizeLegacy($raw,$id);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
-            $b['blindID']=$bid;$b['name']=IPS_GetName($bid);
-            // Im Altsystem ist BehangID selbst die KNX-Positionsvariable. Eine dort konfigurierte
-            // Rückmeldeadresse aktualisiert denselben Variablenwert; ein separates Statusobjekt ist nicht nötig.
-            if((int)($b['positionControlID']??0)<=0&&IPS_VariableExists($bid))$b['positionControlID']=$bid;
-            $b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$r[(string)$bid]=$b;
+            $b['blindID']=$bid;
+            // In the legacy SmartHome configuration BehangID is the existing KNX DPT5/EIS position instance.
+            // That same instance receives the additional KNX feedback address and therefore represents both
+            // command and actual value. Keep an explicit separate status ID optional.
+            if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
+            $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$r[(string)$bid]=$b;
         }
         return$r;
     }
@@ -65,13 +66,19 @@ trait SHDModuleData
                     $b['calendarModeID']=$c;
                     foreach(IPS_GetChildrenIDs($c) as $eventID){
                         $eo=IPS_GetObject($eventID);$etype=(int)($eo['ObjectType']??-1);$ename=mb_strtolower(trim((string)($eo['ObjectName']??'')));
-                        if($etype!==4)continue;$isSchedule=false;
-                        if(function_exists('IPS_GetEvent')){try{$ev=IPS_GetEvent($eventID);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}}
+                        if($etype!==4)continue;
+                        $isSchedule=false;
+                        if(function_exists('IPS_GetEvent')){
+                            try{$ev=IPS_GetEvent($eventID);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
+                        }
                         if($isSchedule||str_contains($ename,'wochenplan')||str_contains($ename,'ereignis')){$b['scheduleEventID']=$eventID;break;}
                     }
                 }
                 if($type===4&&(int)($b['scheduleEventID']??0)<=0){
-                    $isSchedule=false;if(function_exists('IPS_GetEvent')){try{$ev=IPS_GetEvent($c);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}}
+                    $isSchedule=false;
+                    if(function_exists('IPS_GetEvent')){
+                        try{$ev=IPS_GetEvent($c);$isSchedule=((int)($ev['EventType']??-1)===2);}catch(Throwable $e){}
+                    }
                     if($isSchedule||str_contains($name,'wochenplan')||str_contains($name,'ereignis'))$b['scheduleEventID']=$c;
                 }
             }
@@ -86,6 +93,26 @@ trait SHDModuleData
         }
     }
 
+    private function effectivePositionValueID(array $b): int
+    {
+        $status=(int)($b['positionStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;
+        $control=(int)($b['positionControlID']??0);if($control>0&&IPS_InstanceExists($control)){
+            $valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;
+        }
+        if($control>0&&IPS_VariableExists($control))return$control;
+        return 0;
+    }
+
+    private function effectiveSlatValueID(array $b): int
+    {
+        $status=(int)($b['slatStatusID']??0);if($status>0&&IPS_VariableExists($status))return$status;
+        $control=(int)($b['slatControlID']??0);if($control>0&&IPS_InstanceExists($control)){
+            $valueID=@IPS_GetObjectIDByIdent('Value',$control);if($valueID!==false&&IPS_VariableExists((int)$valueID))return(int)$valueID;
+        }
+        if($control>0&&IPS_VariableExists($control))return$control;
+        return 0;
+    }
+
     private function validateBlind(array $b): array
     {
         $e=[];$w=$b['warnings']??[];$i=$b['infos']??[];
@@ -93,8 +120,8 @@ trait SHDModuleData
         if(SHDMath::facadeAzimuth($b)===null&&(($b['sunFrom']??null)===null||($b['sunTo']??null)===null))$w[]='Keine nutzbare Fassadenausrichtung oder Sonnenfenster vorhanden.';
         if((int)($b['roomTempID']??0)<=0)$i[]='Raumtemperatur fehlt; thermische Regeln sind eingeschränkt.';
         if((int)($b['roomSetpointID']??0)<=0)$i[]='Raum-Solltemperatur fehlt; thermische Regeln sind eingeschränkt.';
-        if((int)($b['positionStatusID']??0)<=0&&(int)($b['positionControlID']??0)<=0)$w[]='Positionswert/-rückmeldung fehlt.';
-        if(($b['type']??'')==='venetian'&&(int)($b['slatStatusID']??0)<=0&&(int)($b['slatControlID']??0)<=0)$w[]='Lamellenwert/-rückmeldung fehlt.';
+        if($this->effectivePositionValueID($b)<=0)$w[]='Positionswert/-rückmeldung fehlt.';
+        if(($b['type']??'')==='venetian'&&$this->effectiveSlatValueID($b)<=0)$w[]='Lamellenwert/-rückmeldung fehlt.';
         if((int)($b['calendarModeID']??0)<=0)$i[]='Variable „Aktuelles Programm“ fehlt; Standardmodus wird verwendet.';
         if((int)($b['scheduleEventID']??0)<=0)$i[]='Wochenplan/Kalender-Ereignis nicht zugeordnet.';
         return['errors'=>array_values(array_unique($e)),'warnings'=>array_values(array_unique($w)),'infos'=>array_values(array_unique($i))];
@@ -102,7 +129,7 @@ trait SHDModuleData
 
     private function inventoryEntry(array $b): array
     {
-        return['blindID'=>$b['blindID']??0,'name'=>$b['name']??'','source'=>$b['source']??'module','type'=>$b['type']??'','room'=>$b['room']??'','facadeAzimuth'=>SHDMath::facadeAzimuth($b),'sunFrom'=>$b['sunFrom']??null,'sunTo'=>$b['sunTo']??null,'calendarModeID'=>$b['calendarModeID']??0,'scheduleEventID'=>$b['scheduleEventID']??0,'sleepStateID'=>$b['sleepStateID']??0,'wakeReleaseID'=>$b['wakeReleaseID']??0,'daylightReleaseID'=>$b['daylightReleaseID']??0,'controlLockID'=>$b['controlLockID']??0,'panicID'=>$b['panicID']??0,'positionControlID'=>$b['positionControlID']??0,'positionStatusID'=>$b['positionStatusID']??0,'effectivePositionFeedbackID'=>((int)($b['positionStatusID']??0)>0?(int)$b['positionStatusID']:(int)($b['positionControlID']??0)),'slatControlID'=>$b['slatControlID']??0,'slatStatusID'=>$b['slatStatusID']??0,'effectiveSlatFeedbackID'=>((int)($b['slatStatusID']??0)>0?(int)$b['slatStatusID']:(int)($b['slatControlID']??0)),'doorContactID'=>$b['doorContactID']??0,'roomTempID'=>$b['roomTempID']??0,'roomSetpointID'=>$b['roomSetpointID']??0,'validation'=>$this->validateBlind($b)];
+        return['blindID'=>$b['blindID']??0,'name'=>$b['name']??'','source'=>$b['source']??'module','type'=>$b['type']??'','room'=>$b['room']??'','facadeAzimuth'=>SHDMath::facadeAzimuth($b),'sunFrom'=>$b['sunFrom']??null,'sunTo'=>$b['sunTo']??null,'calendarModeID'=>$b['calendarModeID']??0,'scheduleEventID'=>$b['scheduleEventID']??0,'sleepStateID'=>$b['sleepStateID']??0,'wakeReleaseID'=>$b['wakeReleaseID']??0,'daylightReleaseID'=>$b['daylightReleaseID']??0,'controlLockID'=>$b['controlLockID']??0,'panicID'=>$b['panicID']??0,'positionControlID'=>$b['positionControlID']??0,'positionStatusID'=>$b['positionStatusID']??0,'effectivePositionValueID'=>$this->effectivePositionValueID($b),'slatControlID'=>$b['slatControlID']??0,'slatStatusID'=>$b['slatStatusID']??0,'effectiveSlatValueID'=>$this->effectiveSlatValueID($b),'doorContactID'=>$b['doorContactID']??0,'roomTempID'=>$b['roomTempID']??0,'roomSetpointID'=>$b['roomSetpointID']??0,'validation'=>$this->validateBlind($b)];
     }
 
     private function fmt(mixed $v,string $s): string{return$v===null?'–':number_format((float)$v,1,',','.').$s;}
