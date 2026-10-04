@@ -87,7 +87,7 @@ trait SHDModuleUI
             ['type'=>'Button','caption'=>'Jetzt auswerten','onClick'=>'SHD_Evaluate($id);'],
             ['type'=>'Button','caption'=>'Konfiguration prüfen','onClick'=>'echo SHD_ValidateConfiguration($id);'],
             ['type'=>'Button','caption'=>'Inventar als JSON anzeigen','onClick'=>'echo SHD_GetInventoryJSON($id);'],
-            ['type'=>'Button','caption'=>'Heutiges Tagesprotokoll als JSON anzeigen','onClick'=>'echo SHD_GetDailyProtocolJSON($id, "");'],
+            ['type'=>'Button','caption'=>'Heutiges Tagesprotokoll herunterladen (.json.gz)','download'=>'SmartShading-Tagesprotokoll-'.date('Y-m-d').'.json.gz','onClick'=>'$json=SHD_GetDailyProtocolJSON($id, ""); $gz=gzencode($json, 9); echo "data:application/gzip;base64,".base64_encode($gz);'],
             ['type'=>'Button','caption'=>'Tagesprotokoll löschen','confirm'=>'Soll das Tagesprotokoll wirklich gelöscht werden?','onClick'=>'SHD_ClearProtocol($id);']
         ],'status'=>[['code'=>102,'icon'=>'active','caption'=>'Aktiv'],['code'=>104,'icon'=>'inactive','caption'=>'Inaktiv']]];
         return json_encode($form,JSON_UNESCAPED_UNICODE);
