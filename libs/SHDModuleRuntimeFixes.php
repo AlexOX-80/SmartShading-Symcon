@@ -7,6 +7,10 @@ trait SHDModuleRuntimeFixes
     {
         if(!$this->ReadPropertyBoolean('Active')) return;
 
+        // Register here as well so existing module instances receive the new visualization
+        // without requiring recreation of the instance.
+        $this->RegisterVariableString('SunMap','Sonnenkarte','~HTMLBox');
+
         $memory=$this->memory();
         $engine=new SHDEngine();
         $decisions=[];$inventory=[];$events=[];
@@ -31,8 +35,6 @@ trait SHDModuleRuntimeFixes
             $minSolar=max(150.0,$this->ReadPropertyFloat('SunOffThreshold'));
             if($rad!==null&&(float)$rad<$minSolar){
                 $s['directSunForThermal']=false;
-                // The current engine uses directSun for solar thermal rules.
-                // Geometry remains available in the protocol via sun azimuth/elevation.
                 $s['directSun']=false;
             }else{
                 $s['directSunForThermal']=$s['directSun']??false;
@@ -57,6 +59,8 @@ trait SHDModuleRuntimeFixes
                 'lastSleepActive'=>$s['sleepActive'],
                 'lastWakeRelease'=>$s['wakeRelease'],
                 'lastControlLockDesired'=>$d->controlLockDesired,
+                'lastDirectSun'=>$s['directSun']??false,
+                'lastRadiation'=>$s['radiationFiltered']??null,
                 'lastProtocolTimestamp'=>$log?time():(int)($old['lastProtocolTimestamp']??0),
                 'coldNightActive'=>$s['coldNightActive'],
                 'timestamp'=>time()
@@ -69,6 +73,7 @@ trait SHDModuleRuntimeFixes
         SetValueString($this->GetIDForIdent('Inventory'),json_encode($inventory,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE));
         SetValueString($this->GetIDForIdent('Dashboard'),$this->dashboard($decisions));
         SetValueString($this->GetIDForIdent('DayProtocol'),$this->protocolHtml(date('Y-m-d')));
+        SetValueString($this->GetIDForIdent('SunMap'),$this->sunMapHtml($decisions));
         SetValueInteger($this->GetIDForIdent('LastEvaluation'),time());
     }
 }
