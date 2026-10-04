@@ -5,11 +5,12 @@ require_once __DIR__ . '/../libs/DecisionEngine.php';
 require_once __DIR__ . '/../libs/SHDModuleUI.php';
 require_once __DIR__ . '/../libs/SHDModuleRuntime.php';
 require_once __DIR__ . '/../libs/SHDModuleRuntimeFixes.php';
+require_once __DIR__ . '/../libs/SHDModuleSunMap.php';
 require_once __DIR__ . '/../libs/SHDModuleData.php';
 
 class SmartShading extends IPSModule
 {
-    use SHDModuleUI, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleData {
+    use SHDModuleUI, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleSunMap, SHDModuleData {
         SHDModuleRuntimeFixes::Evaluate insteadof SHDModuleRuntime;
     }
 }
