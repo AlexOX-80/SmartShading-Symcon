@@ -7,7 +7,7 @@ trait SHDModuleUI
     {
         parent::Create();
         foreach(['Active'=>true,'ShadowMode'=>true,'AutoDiscoverLegacy'=>true] as $n=>$v)$this->RegisterPropertyBoolean($n,$v);
-        foreach(['EvaluationInterval'=>300,'SunAzimuthID'=>0,'SunElevationID'=>0,'RadiationID'=>0,'OutsideTemperatureID'=>0,'OutdoorBrightnessID'=>0,'WindAlarmID'=>0,'HailAlarmID'=>0,'RainAlarmID'=>0,'EmergencyID'=>0,'ProtocolRetentionDays'=>3,'ProtocolSnapshotMinutes'=>60] as $n=>$v)$this->RegisterPropertyInteger($n,$v);
+        foreach(['EvaluationInterval'=>300,'SunAzimuthID'=>0,'SunElevationID'=>0,'RadiationID'=>0,'OutsideTemperatureID'=>0,'OutdoorBrightnessID'=>0,'RoomSetpointFallbackID'=>0,'WindAlarmID'=>0,'HailAlarmID'=>0,'RainAlarmID'=>0,'EmergencyID'=>0,'ProtocolRetentionDays'=>3,'ProtocolSnapshotMinutes'=>60] as $n=>$v)$this->RegisterPropertyInteger($n,$v);
         foreach(['SunOnThreshold'=>300.0,'SunOffThreshold'=>180.0,'DaylightLuxThreshold'=>100.0,'PrivacyRatioThreshold'=>1.0,'ColdNightOn'=>-5.0,'ColdNightOff'=>-3.0,'LegacyFacade0Azimuth'=>320.0,'LegacyFacade1Azimuth'=>50.0,'LegacyFacade2Azimuth'=>140.0,'LegacyFacade3Azimuth'=>230.0] as $n=>$v)$this->RegisterPropertyFloat($n,$v);
         $this->RegisterPropertyString('Blinds','[]');
         $this->RegisterAttributeString('DecisionMemory','{}');
@@ -50,11 +50,12 @@ trait SHDModuleUI
             ['type'=>'NumberSpinner','name'=>'EvaluationInterval','caption'=>'Auswertungsintervall in Sekunden','minimum'=>30],
 
             ['type'=>'ExpansionPanel','caption'=>'Umgebung und Sensoren','items'=>[
-                $help('? Hilfe','Umgebung und Sensoren','Hier werden die zentralen Messwerte zugeordnet. Sonnenazimut und Sonnenhöhe bestimmen die geometrische Besonnung. Strahlung bzw. Helligkeit entscheiden, ob tatsächlich Sonne oder Tageslicht vorhanden ist. Sicherheitsmeldungen haben Vorrang vor Komfortregeln.'),
+                $help('? Hilfe','Umgebung und Sensoren','Hier werden die zentralen Messwerte zugeordnet. Sonnenazimut und Sonnenhöhe bestimmen die geometrische Besonnung. Strahlung bzw. Helligkeit entscheiden, ob tatsächlich Sonne oder Tageslicht vorhanden ist. Der globale Raumtemperatur-Sollwert dient als Fallback für Behänge ohne eigenen Raum-Sollwert; bleibt er leer, wird eBUS automatisch gesucht. Sicherheitsmeldungen haben Vorrang vor Komfortregeln.'),
                 $sv('SunAzimuthID','Sonnenazimut',[1,2]),$sv('SunElevationID','Sonnenhöhe',[1,2]),
                 $sv('RadiationID','Solarstrahlung in W/m²',[1,2]),$sv('OutsideTemperatureID','Außentemperatur',[1,2]),
-                $sv('OutdoorBrightnessID','Außenhelligkeit in Lux (optional)',[1,2]),$sv('WindAlarmID','Windalarm',[0]),
-                $sv('HailAlarmID','Hagelalarm',[0]),$sv('RainAlarmID','Regen/Nässe',[0]),$sv('EmergencyID','Gefahr/Brand-Freigabe',[0])
+                $sv('OutdoorBrightnessID','Außenhelligkeit in Lux (optional)',[1,2]),
+                $sv('RoomSetpointFallbackID','Raumtemperatur Soll global / eBUS-Fallback',[1,2]),
+                $sv('WindAlarmID','Windalarm',[0]),$sv('HailAlarmID','Hagelalarm',[0]),$sv('RainAlarmID','Regen/Nässe',[0]),$sv('EmergencyID','Gefahr/Brand-Freigabe',[0])
             ]],
 
             ['type'=>'ExpansionPanel','caption'=>'Schwellwerte','items'=>[
