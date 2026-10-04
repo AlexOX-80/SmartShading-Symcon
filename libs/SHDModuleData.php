@@ -19,7 +19,7 @@ trait SHDModuleData
         foreach($configured as $k=>$cfg){
             if(!isset($legacy[(string)$k])){$legacy[(string)$k]=$cfg;continue;}
             $base=$legacy[(string)$k];$merged=array_replace($base,$cfg);
-            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatStatusID','roomTempID','roomSetpointID'] as $field){
+            foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){
                 if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];
             }
             foreach(['facadeAzimuth','sunFrom','sunTo'] as $field){
@@ -41,9 +41,6 @@ trait SHDModuleData
             $raw=json_decode(GetValueString($id),true);if(!is_array($raw)||(!array_key_exists('BehangID',$raw)&&!array_key_exists('Typ',$raw)))continue;
             $b=SHDConfig::normalizeLegacy($raw,$id);$bid=$b['blindID']?:IPS_GetParent($id);if($bid<=0||!IPS_ObjectExists($bid))$bid=IPS_GetParent($id);
             $b['blindID']=$bid;
-            // In the legacy SmartHome configuration BehangID is the existing KNX DPT5/EIS position instance.
-            // That same instance receives the additional KNX feedback address and therefore represents both
-            // command and actual value. Keep an explicit separate status ID optional.
             if(($b['positionControlID']??0)<=0&&$bid>0&&IPS_InstanceExists($bid))$b['positionControlID']=$bid;
             $b['name']=IPS_GetName($bid);$b['facadeAzimuth']=$this->legacyAz($b['facade']??null);$this->mapLegacy($b);$r[(string)$bid]=$b;
         }
