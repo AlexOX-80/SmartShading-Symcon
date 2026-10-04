@@ -1,0 +1,9 @@
+SmartShading v0.3-shadow
+- pure decision engine rewritten around safety -> constraints -> comfort targets
+- live legacy calendar state mapping
+- sleep/wake/daylight release
+- privacy day/night constraints using lux ratio with sun-elevation fallback
+- cold-night insulation
+- panic/lock shadow behavior
+- event-based daily protocol
+- no actuator writes

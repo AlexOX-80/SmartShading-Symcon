@@ -1,43 +1,23 @@
-# Architecture v0.2
+# SmartShading v0.3-shadow architecture
 
-```text
-Symcon variables
-      |
-      v
-Environment/Blind State
-      |
-      v
-Pure SHDEngine
-      |
-      v
-Decision + Reason + Priority
-      |
-      +----> Dashboard / JSON diagnostics
-      |
-      X  actuator driver intentionally absent in v0.2
-```
+Decision order:
 
-## Public-driver strategy
+1. Emergency / wind / hail / door / panic
+2. Calendar mode
+3. Sleep + wake/daylight release
+4. Constraints:
+   - privacy day/night
+   - sleep closure
+   - cold-night insulation
+5. Comfort targets:
+   - overheating
+   - sun protection
+   - passive solar heat
+   - daylight
+6. Clamp the selected comfort target to active constraints
+7. Log the complete reason trace
 
-v0.3+ will introduce a driver boundary:
+`SLEEP` is not intended to block morning daylight forever: a valid wake release removes the sleep
+constraint even if the surrounding schedule still represents the sleeping period.
 
-```text
-SHDDecision
-    |
-    v
-CommandArbiter
-    |
-    +-- GenericVariableDriver
-    +-- KNXVariableDriver
-```
-
-The command arbiter will enforce:
-
-- position deadband
-- slat deadband
-- minimum command interval
-- feedback validation
-- safety lock
-- stale input rejection
-
-The decision engine remains device-independent.
+For stairwells/halls, `daylightReleaseID` can point to an `allAwake` group variable.

@@ -1,60 +1,39 @@
-# SmartShading for IP-Symcon — v0.2
+# SmartShading for IP-Symcon — v0.3-shadow
 
-v0.2 turns the proof of concept into a usable IP-Symcon configuration module.
+This release is intentionally a **day simulation / shadow release**. It never writes blind positions,
+slat positions or KNX lock objects.
 
-## New in v0.2
+## New in v0.3-shadow
 
-- native editable `List` for blinds
-- individual edit dialog per blind
-- legacy discovery appears as yellow migration rows
-- configuration validation
-- position/slat feedback fields
-- actuator target fields prepared but not used yet
-- automatic non-destructive status-variable name heuristics
-- HTML diagnostics dashboard
-- actual position/slat included in state
-- no actuator writes
+- reconstructs the old per-blind `Aktuelles Programm` calendar state automatically
+- maps old calendar values to AUTO / OPEN / CLOSED / MANUAL
+- separates safety overrides, constraints and comfort targets
+- privacy is a minimum-closure constraint, not a winner
+- daylight opens when bright enough, but can be blocked by sleep/wake release
+- optional per-room/person/group `wakeReleaseID` and `daylightReleaseID`
+- sleep produces a desired KNX control lock, but does not write it yet
+- panic input releases sleep lock, requests opening and marks `alertRequested=true`
+- only panic requests an alert; ordinary blocked operation does not
+- night cold insulation only acts in darkness
+- indoor/outdoor brightness ratio can select day/night privacy
+- event-based day protocol + hourly snapshots
+- protocol JSON can be copied to ChatGPT for questions such as:
+  - Why did the kitchen close at 16:20?
+  - Which constraint prevented solar heating from opening the blind?
+  - When did the stairwell receive daylight release?
 
-## Safety / current behavior
+## Recommended day test
 
-**v0.2 never writes to any actuator.**
-`ShadowMode` remains visible, but the driver is intentionally not implemented yet.
+1. Update the module.
+2. Keep Shadow Mode enabled.
+3. Assign global sun/outside/radiation values.
+4. Review each blind's automatically discovered `calendarModeID`.
+5. Optionally assign sleep/wake/group-release variables for selected rooms.
+6. Press **Clear day protocol** in the morning.
+7. Let the module run for a day.
+8. In the evening press **Show today protocol JSON** and copy the result into ChatGPT.
 
-This lets you install the module in the real house and validate discovery and decisions safely.
+## Important
 
-## Suggested first deployment
-
-1. Put this folder into a Git repository.
-2. Add repository via IP-Symcon Module Control.
-3. Create one `SmartShading` instance.
-4. Keep `ShadowMode` enabled.
-5. Assign global sensor variables.
-6. Review yellow legacy blind rows.
-7. Correct facade azimuths and room mappings.
-8. Assign position/slat status variables where already present.
-9. Apply configuration.
-10. Watch the Dashboard for several days.
-
-## Blind list fields
-
-Each blind can store:
-
-- enabled
-- name
-- room
-- type
-- facade azimuth
-- optional sun entry/exit angle
-- position control variable
-- position feedback variable
-- slat control variable
-- slat feedback variable
-- room temperature
-- room setpoint
-- door contact
-- privacy day/night values
-
-## Migration principle
-
-The old house configuration is only an import source.
-The target architecture is a self-contained module property list so future users do not need the historic script structure.
+This release does **not** command actuators and does **not** send KNX locks. It only records what it
+*would* do. Live control belongs to a later release after the protocol has been reviewed.
