@@ -22,9 +22,18 @@ trait SHDModuleData
             foreach(['calendarModeID','scheduleEventID','positionControlID','positionStatusID','slatControlID','slatStatusID','roomTempID','roomSetpointID'] as $field){
                 if((int)($cfg[$field]??0)<=0&&(int)($base[$field]??0)>0)$merged[$field]=(int)$base[$field];
             }
-            foreach(['facadeAzimuth','sunFrom','sunTo'] as $field){
+
+            // Older form versions persisted 0 for an unset facade azimuth. For legacy rows this is
+            // a UI default, not the actual house orientation. Always restore the mapped legacy azimuth.
+            if(($cfg['source']??'')==='legacy'&&array_key_exists('facadeAzimuth',$base)&&$base['facadeAzimuth']!==null){
+                $merged['facadeAzimuth']=$base['facadeAzimuth'];
+            }elseif((!array_key_exists('facadeAzimuth',$cfg)||$cfg['facadeAzimuth']===null||$cfg['facadeAzimuth']==='')&&array_key_exists('facadeAzimuth',$base)){
+                $merged['facadeAzimuth']=$base['facadeAzimuth'];
+            }
+            foreach(['sunFrom','sunTo'] as $field){
                 if((!array_key_exists($field,$cfg)||$cfg[$field]===null||$cfg[$field]==='')&&array_key_exists($field,$base))$merged[$field]=$base[$field];
             }
+
             $merged['warnings']=array_values(array_filter(array_unique(array_merge($base['warnings']??[],$cfg['warnings']??[])),fn($x)=>!str_contains((string)$x,'ID Lamellensteuerung')));
             $merged['infos']=array_values(array_unique(array_merge($base['infos']??[],$cfg['infos']??[])));
             $legacy[(string)$k]=$merged;
@@ -108,6 +117,20 @@ trait SHDModuleData
         }
         if($control>0&&IPS_VariableExists($control))return$control;
         return 0;
+    }
+
+    private function objectDisplayName(int $id): string
+    {
+        if($id<=0||!IPS_ObjectExists($id))return'–';
+        return IPS_GetName($id).' ['.$id.']';
+    }
+
+    private function feedbackDisplay(array $b): string
+    {
+        $status=(int)($b['positionStatusID']??0);
+        if($status>0&&IPS_VariableExists($status))return'separat: '.$this->objectDisplayName($status);
+        if($this->effectivePositionValueID($b)>0&&(int)($b['positionControlID']??0)>0)return'integriert';
+        return'fehlt';
     }
 
     private function validateBlind(array $b): array
