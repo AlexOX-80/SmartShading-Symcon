@@ -27,8 +27,17 @@ trait SHDModuleUI
 
     public function GetConfigurationForm(): string
     {
-        $rows=[];foreach($this->blinds() as $b)$rows[]=$b;
+        $rows=[];
+        foreach($this->blinds() as $b){
+            $row=$b;
+            $az=SHDMath::facadeAzimuth($b);
+            $row['facadeDisplay']=$az===null?'–':number_format($az,0,',','.').'°';
+            $row['positionDisplay']=$this->objectDisplayName((int)($b['positionControlID']??0));
+            $row['feedbackDisplay']=$this->feedbackDisplay($b);
+            $rows[]=$row;
+        }
         $sv=fn(string $n,string $c,array $t=[0,1,2])=>['type'=>'SelectVariable','name'=>$n,'caption'=>$c,'validVariableTypes'=>$t];
+        $si=fn(string $n,string $c)=>['type'=>'SelectInstance','name'=>$n,'caption'=>$c];
         $help=fn(string $caption,string $title,string $text)=>[
             'type'=>'PopupButton','caption'=>$caption,
             'popup'=>['caption'=>$title,'closeCaption'=>'Schließen','items'=>[['type'=>'Label','caption'=>$text]]]
@@ -91,10 +100,11 @@ trait SHDModuleUI
             ['name'=>'name','caption'=>'Behang','width'=>'auto','add'=>'','edit'=>['type'=>'ValidationTextBox']],
             ['name'=>'room','caption'=>'Raum','width'=>'100px','add'=>'','edit'=>['type'=>'ValidationTextBox']],
             ['name'=>'type','caption'=>'Typ','width'=>'85px','add'=>'venetian','edit'=>['type'=>'Select','options'=>[['caption'=>'Jalousie','value'=>'venetian'],['caption'=>'Rollladen','value'=>'roller']]]],
-            ['name'=>'facadeAzimuth','caption'=>'Fassade °','width'=>'80px','add'=>0,'edit'=>['type'=>'NumberSpinner','minimum'=>0,'maximum'=>359]],
+            ['name'=>'facadeDisplay','caption'=>'Fassade','width'=>'80px'],
             ['name'=>'calendarModeID','caption'=>'Aktueller Modus','width'=>'130px','add'=>0,'edit'=>['type'=>'SelectVariable','validVariableTypes'=>[1]]],
             ['name'=>'scheduleEventID','caption'=>'Wochenplan','width'=>'130px','add'=>0,'edit'=>['type'=>'SelectEvent']],
-            ['name'=>'positionStatusID','caption'=>'Position Ist','width'=>'105px','add'=>0,'edit'=>['type'=>'SelectVariable','validVariableTypes'=>[1,2]]],
+            ['name'=>'positionDisplay','caption'=>'Position KNX','width'=>'180px'],
+            ['name'=>'feedbackDisplay','caption'=>'Rückmeldung','width'=>'105px'],
             ['name'=>'source','caption'=>'Herkunft','width'=>'75px','add'=>'module','save'=>true]
         ];
     }
@@ -102,6 +112,7 @@ trait SHDModuleUI
     private function editForm(): array
     {
         $sv=fn(string $n,string $c,array $t=[0,1,2])=>['type'=>'SelectVariable','name'=>$n,'caption'=>$c,'validVariableTypes'=>$t];
+        $si=fn(string $n,string $c)=>['type'=>'SelectInstance','name'=>$n,'caption'=>$c];
         $help=fn(string $title,string $text)=>['type'=>'PopupButton','caption'=>'? Hilfe','popup'=>['caption'=>$title,'closeCaption'=>'Schließen','items'=>[['type'=>'Label','caption'=>$text]]]];
         return[
             ['type'=>'CheckBox','name'=>'enabled','caption'=>'Aktiv'],
@@ -124,9 +135,9 @@ trait SHDModuleUI
             ]],
 
             ['type'=>'ExpansionPanel','caption'=>'Antrieb und Rückmeldungen','items'=>[
-                $help('Antrieb und Rückmeldungen','Steuerwerte wären später die Zielvariablen für Fahrposition und Lamellen. Die Rückmeldungen sind die tatsächlichen Istwerte des Aktors und sind für Plausibilitätsprüfung, manuelle Eingriffe und eine spätere Live-Steuerung wichtig.'),
-                $sv('positionControlID','Position anfahren',[1,2]),$sv('positionStatusID','Position Ist',[1,2]),
-                $sv('slatControlID','Lamelle anfahren',[1,2]),$sv('slatStatusID','Lamelle Ist',[1,2])
+                $help('Antrieb und Rückmeldungen','„Position anfahren“ und „Lamelle anfahren“ sind die vorhandenen KNX-Instanzen. Bei deiner Anlage ist die jeweilige Rückmelde-GA normalerweise bereits in derselben KNX-Instanz hinterlegt. Ein separates Istwert-Objekt ist daher optional und nur nötig, wenn die Rückmeldung separat in Symcon angelegt wurde.'),
+                $si('positionControlID','KNX-Instanz Position anfahren'),$sv('positionStatusID','Separater Positions-Istwert (optional)',[1,2]),
+                $si('slatControlID','KNX-Instanz Lamelle anfahren'),$sv('slatStatusID','Separater Lamellen-Istwert (optional)',[1,2])
             ]],
 
             ['type'=>'ExpansionPanel','caption'=>'Raum, Helligkeit und Tür','items'=>[
