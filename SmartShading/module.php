@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../libs/DecisionEngine.php';
 require_once __DIR__ . '/../libs/SHDModuleUI.php';
 require_once __DIR__ . '/../libs/SHDModuleProtocolDownload.php';
+require_once __DIR__ . '/../libs/SHDModuleProtocolStorage.php';
 require_once __DIR__ . '/../libs/SHDModuleRuntime.php';
 require_once __DIR__ . '/../libs/SHDModuleRuntimeFixes.php';
 require_once __DIR__ . '/../libs/SHDModuleSunMap.php';
@@ -14,7 +15,9 @@ require_once __DIR__ . '/../libs/SHDModuleData.php';
 
 class SmartShading extends IPSModule
 {
-    use SHDModuleUI, SHDModuleProtocolDownload, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleSunMap, SHDModuleSetpoint, SHDModuleProtocolTolerance, SHDModuleShadowSun, SHDModuleData {
+    use SHDModuleUI, SHDModuleProtocolDownload, SHDModuleProtocolStorage, SHDModuleRuntime, SHDModuleRuntimeFixes, SHDModuleSunMap, SHDModuleSetpoint, SHDModuleProtocolTolerance, SHDModuleShadowSun, SHDModuleData {
+        SHDModuleUI::Create as private CreateBase;
+        SHDModuleProtocolStorage::Create insteadof SHDModuleUI;
         SHDModuleUI::GetConfigurationForm as private GetConfigurationFormBase;
         SHDModuleProtocolDownload::GetConfigurationForm insteadof SHDModuleUI;
         SHDModuleRuntimeFixes::Evaluate insteadof SHDModuleRuntime;
@@ -24,5 +27,9 @@ class SmartShading extends IPSModule
         SHDModuleShadowSun::state insteadof SHDModuleRuntime;
         SHDModuleRuntime::protocolEvent as private protocolEventBase;
         SHDModuleShadowSun::protocolEvent insteadof SHDModuleRuntime;
+        SHDModuleProtocolStorage::GetDailyProtocolJSON insteadof SHDModuleRuntime;
+        SHDModuleProtocolStorage::ClearProtocol insteadof SHDModuleRuntime;
+        SHDModuleProtocolStorage::appendProtocol insteadof SHDModuleRuntime;
+        SHDModuleProtocolStorage::protocol insteadof SHDModuleRuntime;
     }
 }
