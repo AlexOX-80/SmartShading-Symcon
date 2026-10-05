@@ -8,12 +8,11 @@ trait SHDModuleProtocolDownload
         $form=json_decode($this->GetConfigurationFormBase(),true);
         if(!is_array($form)) return $this->GetConfigurationFormBase();
 
-        $retention=max(1,min(14,$this->ReadPropertyInteger('ProtocolRetentionDays')));
         $items=[];
-        for($i=0;$i<$retention;$i++){
-            $ts=strtotime('-'.$i.' day');
-            $date=date('Y-m-d',$ts);
-            $caption=$i===0?'Heute – '.date('d.m.Y',$ts):($i===1?'Gestern – '.date('d.m.Y',$ts):date('d.m.Y',$ts));
+        foreach($this->GetAvailableProtocolDates() as $date=>$count){
+            $ts=strtotime((string)$date);
+            $caption=((string)$date===date('Y-m-d')?'Heute – ':(((string)$date===date('Y-m-d',strtotime('-1 day')))?'Gestern – ':''))
+                .date('d.m.Y',$ts).' · '.(int)$count.' Events';
             $items[]=[
                 'type'=>'Button',
                 'caption'=>$caption,
@@ -21,6 +20,7 @@ trait SHDModuleProtocolDownload
                 'onClick'=>'$json=SHD_GetDailyProtocolJSON($id, "'.$date.'"); $gz=gzencode($json, 9); echo "data:application/gzip;base64,".base64_encode($gz);'
             ];
         }
+        if(count($items)===0)$items[]=['type'=>'Label','caption'=>'Noch keine gespeicherten Tagesprotokolle vorhanden.'];
 
         $actions=$form['actions']??[];
         $newActions=[];
@@ -30,7 +30,7 @@ trait SHDModuleProtocolDownload
                     'type'=>'PopupButton',
                     'caption'=>'Tagesprotokoll nach Datum herunterladen',
                     'popup'=>[
-                        'caption'=>'Tagesprotokoll auswählen',
+                        'caption'=>'Gespeicherte Tagesprotokolle',
                         'closeCaption'=>'Schließen',
                         'items'=>$items
                     ]
