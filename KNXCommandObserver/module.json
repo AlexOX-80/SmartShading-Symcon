@@ -1,0 +1,14 @@
+{
+    "id": "{B6D481E9-7B45-4C15-9A6C-0E6A6B1F7C22}",
+    "name": "KNXCommandObserver",
+    "type": 3,
+    "vendor": "Smart Home",
+    "aliases": [
+        "KNX Command Observer",
+        "KNX Telegramm Observer"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "KNO"
+}
