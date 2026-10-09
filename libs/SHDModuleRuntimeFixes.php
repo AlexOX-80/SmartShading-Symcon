@@ -7,10 +7,6 @@ trait SHDModuleRuntimeFixes
     {
         if(!$this->ReadPropertyBoolean('Active')) return;
 
-        // Register here as well so existing module instances receive the new visualization
-        // without requiring recreation of the instance.
-        $this->RegisterVariableString('SunMap','Sonnenkarte','~HTMLBox');
-
         $memory=$this->memory();
         $engine=new SHDEngine();
         $decisions=[];$inventory=[];$events=[];
@@ -22,15 +18,11 @@ trait SHDModuleRuntimeFixes
             $s=$this->state($b,$old);
             $effective=$b;
 
-            // Bright daytime without a real privacy requirement must not inherit
-            // old PRIVACY_DAY minimum positions from the legacy configuration.
             if(($s['privacyLevel']??'NONE')==='NONE'){
                 $effective['privacyDayPosition']=null;
                 $effective['privacyDaySlat']=null;
             }
 
-            // Astronomical incidence alone is not enough for thermal shading.
-            // At very low/zero measured radiation there is no usable solar load.
             $rad=$s['radiationFiltered']??null;
             $minSolar=max(150.0,$this->ReadPropertyFloat('SunOffThreshold'));
             if($rad!==null&&(float)$rad<$minSolar){
