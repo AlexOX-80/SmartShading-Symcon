@@ -30,5 +30,8 @@ class SmartShading extends IPSModule
         SHDModuleRuntime::protocolEvent as private protocolEventBase;
         SHDModuleShadowSun::protocolEvent as private protocolEventWithShadow;
         SHDModuleManualOverrideClient::protocolEvent insteadof SHDModuleRuntime, SHDModuleShadowSun;
+
+        SHDModuleRuntime::GetDailyProtocolJSON as private GetDailyProtocolJSONBase;
+        SHDModuleManualOverrideClient::GetDailyProtocolJSON insteadof SHDModuleRuntime;
     }
 }
