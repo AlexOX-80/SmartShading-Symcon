@@ -70,6 +70,39 @@ trait SHDModuleManualOverrideClient
         return $event;
     }
 
+    public function GetDailyProtocolJSON(string $date = ''): string
+    {
+        if ($date === '') $date = date('Y-m-d');
+        $baseRaw = $this->GetDailyProtocolJSONBase($date);
+        $base = json_decode($baseRaw, true);
+        if (!is_array($base)) return $baseRaw;
+
+        $managerID = $this->manualOverrideManagerID();
+        if ($managerID <= 0 || !function_exists('MOM_GetEventsJSON')) {
+            $base['manualOverrideManager'] = ['available' => false];
+            return json_encode($base, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        }
+
+        try {
+            $eventsRaw = MOM_GetEventsJSON($managerID, $date);
+            $eventsDoc = json_decode($eventsRaw, true);
+            $events = is_array($eventsDoc['events'] ?? null) ? $eventsDoc['events'] : [];
+            $base['manualOverrideManager'] = [
+                'available' => true,
+                'instanceID' => $managerID,
+                'eventCount' => count($events)
+            ];
+            $base['manualOverrideEvents'] = $events;
+        } catch (Throwable $e) {
+            $base['manualOverrideManager'] = [
+                'available' => true,
+                'instanceID' => $managerID,
+                'error' => $e->getMessage()
+            ];
+        }
+        return json_encode($base, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    }
+
     private function manualOverrideManagerID(): int
     {
         static $cached = null;
