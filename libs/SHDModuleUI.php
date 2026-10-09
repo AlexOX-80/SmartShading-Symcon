@@ -23,7 +23,14 @@ trait SHDModuleUI
 
     public function ApplyChanges(): void
     {
-        parent::ApplyChanges();$active=$this->ReadPropertyBoolean('Active');$this->SetTimerInterval('EvaluateTimer',$active?max(30,$this->ReadPropertyInteger('EvaluationInterval'))*1000:0);$this->SetStatus($active?102:104);if($active)$this->Evaluate();
+        parent::ApplyChanges();
+        $active=$this->ReadPropertyBoolean('Active');
+        $this->SetTimerInterval('EvaluateTimer',$active?max(30,$this->ReadPropertyInteger('EvaluationInterval'))*1000:0);
+        $this->SetStatus($active?102:104);
+        // Deliberately no synchronous Evaluate() here. During module/library updates Symcon
+        // is still rebuilding module state; SmartShading legacy discovery performs expensive
+        // object-tree scans and must not run inside ApplyChanges(). The regular timer or the
+        // "Jetzt auswerten" action starts evaluation after the instance is stable.
     }
 
     public function GetConfigurationForm(): string
@@ -86,7 +93,7 @@ trait SHDModuleUI
 
             ['type'=>'List','name'=>'Blinds','caption'=>'Behänge','add'=>true,'delete'=>true,'rowCount'=>12,'values'=>$rows,'columns'=>$this->columns(),'form'=>$this->editForm()]
         ],'actions'=>[
-            ['type'=>'Label','caption'=>'Simulationsmodus: Es werden keine Fahrbefehle und keine KNX-Bediensperren geschrieben.'],
+            ['type'=>'Label','caption'=>'Simulationsmodus: Es werden keine Fahrbefehle und keine KNX-Sperrbefehle geschrieben.'],
             ['type'=>'Button','caption'=>'Jetzt auswerten','onClick'=>'SHD_Evaluate($id);'],
             ['type'=>'Button','caption'=>'Konfiguration prüfen','onClick'=>'echo SHD_ValidateConfiguration($id);'],
             ['type'=>'Button','caption'=>'Inventar als JSON anzeigen','onClick'=>'echo SHD_GetInventoryJSON($id);'],
@@ -124,7 +131,6 @@ trait SHDModuleUI
             ['type'=>'Select','name'=>'type','caption'=>'Behangtyp','options'=>[['caption'=>'Jalousie','value'=>'venetian'],['caption'=>'Rollladen','value'=>'roller']]],
             ['type'=>'NumberSpinner','name'=>'facadeAzimuth','caption'=>'Fassadenazimut °','minimum'=>0,'maximum'=>359],
             ['type'=>'RowLayout','items'=>[['type'=>'NumberSpinner','name'=>'sunFrom','caption'=>'Sonne ab Azimut °','minimum'=>0,'maximum'=>359],['type'=>'NumberSpinner','name'=>'sunTo','caption'=>'Sonne bis Azimut °','minimum'=>0,'maximum'=>359]]],
-
             ['type'=>'ExpansionPanel','caption'=>'Kalender, Schlafen und Freigaben','items'=>[
                 $help('Kalender, Schlafen und Freigaben','„Aktueller Modus“ ist die Variable „Aktuelles Programm“ und wird für die Entscheidung im aktuellen Moment verwendet. „Wochenplan/Kalender“ ist das Symcon-Ereignis, das diesen Modus zeitgesteuert setzt. Beides wird getrennt gespeichert. Schlaf- und Tageslichtfreigaben können später vom Wecker-/Personenmodul kommen.'),
                 $sv('calendarModeID','Aktueller Modus („Aktuelles Programm“)',[1]),
@@ -136,58 +142,44 @@ trait SHDModuleUI
                 $sv('controlLockID','KNX-Bediensperre Zielvariable (nur Simulation)',[0]),
                 $sv('panicID','Paniktaste Eingang',[0])
             ]],
-
             ['type'=>'ExpansionPanel','caption'=>'Antrieb und Rückmeldungen','items'=>[
                 $help('Antrieb und Rückmeldungen','„Position anfahren“ und „Lamelle anfahren“ sind die vorhandenen KNX-Instanzen. Bei deiner Anlage ist die jeweilige Rückmelde-GA normalerweise bereits in derselben KNX-Instanz hinterlegt. Ein separates Istwert-Objekt ist daher optional und nur nötig, wenn die Rückmeldung separat in Symcon angelegt wurde.'),
                 $si('positionControlID','KNX-Instanz Position anfahren'),$sv('positionStatusID','Separater Positions-Istwert (optional)',[1,2]),
                 $si('slatControlID','KNX-Instanz Lamelle anfahren'),$sv('slatStatusID','Separater Lamellen-Istwert (optional)',[1,2])
             ]],
-
             ['type'=>'ExpansionPanel','caption'=>'Raum, Helligkeit und Tür','items'=>[
                 $help('Raum, Helligkeit und Tür','Raumtemperatur und Solltemperatur entscheiden zwischen passiver Solarwärme und Überhitzungsschutz. Innenhelligkeit wird zusammen mit Außenhelligkeit für den tatsächlichen Sichtschutzbedarf verwendet. Ein geöffneter Türkontakt kann das Herunterfahren begrenzen.'),
                 $sv('roomTempID','Raumtemperatur Ist',[1,2]),$sv('roomSetpointID','Raumtemperatur Soll',[1,2]),
                 $sv('indoorBrightnessID','Innenhelligkeit Lux (optional)',[1,2]),$sv('doorContactID','Türkontakt',[0])
             ]],
-
             ['type'=>'ExpansionPanel','caption'=>'Sichtschutz','items'=>[
-                $help('Sichtschutz','Sichtschutz ist eine Mindestschließung, kein starrer Zielwert. Wenn Sonnenschutz oder Überhitzung stärker schließen müssen, dürfen sie das. Bei ausreichendem Tageslicht und ohne tatsächlichen Sichtschutzbedarf greift keine Sichtschutzgrenze.'),
-                ['type'=>'NumberSpinner','name'=>'privacyDayPosition','caption'=>'Sichtschutz Tag – Mindestschließung %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'privacyDaySlat','caption'=>'Sichtschutz Tag – Lamelle mindestens %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'privacyNightPosition','caption'=>'Sichtschutz Nacht – Mindestschließung %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'privacyNightSlat','caption'=>'Sichtschutz Nacht – Lamelle mindestens %','minimum'=>0,'maximum'=>100]
+                $help('Sichtschutz','Sichtschutz ist eine Mindestschließung, kein starrer Zielwert. Wenn Sonnenschutz oder Überhitzung mehr Schließung verlangen, gewinnt die stärkere Anforderung.'),
+                ['type'=>'NumberSpinner','name'=>'privacyDayPosition','caption'=>'Tagsüber Mindestposition %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'privacyDaySlat','caption'=>'Tagsüber Mindestlamelle %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'privacyNightPosition','caption'=>'Nachts Mindestposition %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'privacyNightSlat','caption'=>'Nachts Mindestlamelle %','minimum'=>0,'maximum'=>100,'digits'=>1]
             ]],
-
-            ['type'=>'ExpansionPanel','caption'=>'Schlafen, Kälteschutz und Sicherheit','items'=>[
-                $help('Schlafen, Kälteschutz und Sicherheit','Im Schlafzustand soll der Behang vollständig schließen und eine KNX-Bediensperre angefordert werden. Die Aufstehfreigabe darf morgens trotz Schlaf-Kalender wieder Tageslicht zulassen. Kälteschutz wirkt nur nachts. Sicherheitsereignisse haben Vorrang.'),
-                ['type'=>'NumberSpinner','name'=>'sleepPosition','caption'=>'Schlafen – Mindestschließung %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'sleepSlat','caption'=>'Schlafen – Lamelle mindestens %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'coldNightPosition','caption'=>'Nacht-Kälteschutz – Mindestschließung %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'doorOpenMaxPosition','caption'=>'Tür offen – maximal zulässige Schließung %','minimum'=>0,'maximum'=>100],
-                ['type'=>'NumberSpinner','name'=>'safetyPosition','caption'=>'Wind/Hagel – Sicherheitsposition %','minimum'=>0,'maximum'=>100]
-            ]],
-
-            ['type'=>'NumberSpinner','name'=>'blindID','caption'=>'Legacy Behang-ID','visible'=>false],
-            ['type'=>'NumberSpinner','name'=>'configVariableID','caption'=>'Legacy Konfigurationsvariable-ID','visible'=>false],
-            ['type'=>'ValidationTextBox','name'=>'source','caption'=>'Herkunft','visible'=>false]
+            ['type'=>'ExpansionPanel','caption'=>'Grenzen und Sicherheit','items'=>[
+                ['type'=>'NumberSpinner','name'=>'sleepPosition','caption'=>'Schlaf Mindestposition %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'sleepSlat','caption'=>'Schlaf Mindestlamelle %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'coldNightPosition','caption'=>'Kälteschutz Nacht Position %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'doorOpenMaxPosition','caption'=>'Tür offen: max. Schließung %','minimum'=>0,'maximum'=>100,'digits'=>1],
+                ['type'=>'NumberSpinner','name'=>'safetyPosition','caption'=>'Wind/Hagel Sicherheitsposition %','minimum'=>0,'maximum'=>100,'digits'=>1]
+            ]]
         ];
     }
 
     private function objectDisplayName(int $id): string
     {
-        if($id<=0||!IPS_ObjectExists($id))return 'fehlt';
-        return IPS_GetName($id).' (#'.$id.')';
+        if($id<=0||!IPS_ObjectExists($id))return'–';
+        $parts=[];$cur=$id;$guard=0;while($cur>0&&IPS_ObjectExists($cur)&&$guard++<3){array_unshift($parts,IPS_GetName($cur));$cur=IPS_GetParent($cur);}return implode(' / ',$parts).' (#'.$id.')';
     }
 
     private function feedbackDisplay(array $b): string
     {
-        $explicit=(int)($b['positionStatusID']??0);
-        if($explicit>0&&IPS_VariableExists($explicit))return 'separat';
-        $control=(int)($b['positionControlID']??0);
-        if($control>0&&IPS_InstanceExists($control)){
-            $valueID=@IPS_GetObjectIDByIdent('Value',$control);
-            if($valueID!==false&&IPS_VariableExists((int)$valueID))return 'integriert';
-        }
-        if($control>0&&IPS_VariableExists($control))return 'integriert';
-        return 'fehlt';
+        $p=(int)($b['positionStatusID']??0);$s=(int)($b['slatStatusID']??0);
+        $parts=[];if($p>0)$parts[]='Pos #'.$p;if($s>0)$parts[]='Lam #'.$s;if($parts)return implode(' · ',$parts);
+        $control=(int)($b['positionControlID']??0);if($control>0&&IPS_InstanceExists($control)){try{$cfg=json_decode(IPS_GetConfiguration($control),true);if(is_array($cfg)&&isset($cfg['Mapping'])){$parts[]='in KNX-Instanz';}}catch(Throwable $e){}}
+        return$parts?implode(' · ',$parts):'–';
     }
 }
