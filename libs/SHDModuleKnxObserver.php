@@ -20,7 +20,7 @@ trait SHDModuleKnxObserver
         $this->ApplyChangesBase();
         $old = $this->ReadAttributeInteger('KnxObserverRegisteredGateway');
         if ($old > 0) {
-            @ $this->UnregisterMessage($old, KL_DEBUG);
+            @$this->UnregisterMessage($old, KL_DEBUG);
         }
         $this->WriteAttributeInteger('KnxObserverRegisteredGateway', 0);
 
@@ -52,7 +52,7 @@ trait SHDModuleKnxObserver
         $this->setKnxObserverStatus('aktiv · Gateway '.IPS_GetName($gateway).' (#'.$gateway.') · Symcon-Quelle '.$this->ReadPropertyString('KnxSymconSourceAddress'));
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data): void
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
     {
         if ($Message !== KL_DEBUG) return;
         if (!$this->ReadPropertyBoolean('KnxObserverEnabled')) return;
@@ -129,7 +129,7 @@ trait SHDModuleKnxObserver
                 ['type' => 'CheckBox', 'name' => 'KnxObserverEnabled', 'caption' => 'KNX Command Observer aktivieren'],
                 ['type' => 'SelectInstance', 'name' => 'KnxGatewayID', 'caption' => 'KNX-Gateway (0 = automatisch erkennen)'],
                 ['type' => 'ValidationTextBox', 'name' => 'KnxSymconSourceAddress', 'caption' => 'Physikalische KNX-Adresse von Symcon'],
-                ['type' => 'Label', 'caption' => 'Aktuell aus dem Gateway-Dump erkannt: 15.15.241. Andere Quelladressen werden als KNX-Gerät/Taster klassifiziert.']
+                ['type' => 'Label', 'caption' => 'Aus dem Gateway-Dump erkannt: 15.15.241. Andere Quelladressen werden als KNX-Gerät/Taster klassifiziert.']
             ]
         ];
         $form['elements'][] = $panel;
