@@ -1,0 +1,14 @@
+{
+  "id": "{4F83C01A-7C8E-4BE2-A503-8C926D2A5A71}",
+  "name": "SolarEnvironmentEstimator",
+  "type": 3,
+  "vendor": "Smart Home",
+  "aliases": [
+    "Solar Environment Estimator",
+    "Solarstrahlung Schätzung"
+  ],
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "SEE"
+}
